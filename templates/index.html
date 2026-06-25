@@ -1,0 +1,859 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+<title>GridDrawPro &amp; Region Select</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;background:#0f0f13;color:#e0e0e0;min-height:100vh;display:flex;flex-direction:column}
+
+/* Header */
+header{background:#1a1a24;padding:10px 20px;border-bottom:1px solid #2a2a3a;display:flex;align-items:center;gap:10px;flex-shrink:0}
+header h1{font-size:16px;font-weight:600}
+header span{color:#7c7c9a;font-size:12px}
+
+/* App layout */
+.app{display:flex;flex-direction:column;flex:1;padding:10px;gap:0;max-width:1500px;margin:0 auto;width:100%;min-height:0}
+
+/* Tab bar */
+.tab-bar{display:flex;gap:4px;flex-shrink:0;padding:0 4px;margin-bottom:10px}
+.tab{padding:8px 20px;border-radius:10px 10px 0 0;border:none;background:#16161f;color:#7c7c9a;font-size:13px;font-weight:500;cursor:pointer;transition:all .15s;border:1px solid #2a2a3a;border-bottom:none}
+.tab:hover{background:#1c1c28;color:#aaa}
+.tab.active{background:#1e1e30;color:#fff;border-color:#6c6cff44}
+.tab .badge{font-size:10px;background:#6c6cff33;color:#9c9cff;padding:1px 8px;border-radius:10px;margin-left:6px}
+
+/* Tab panes */
+.tab-panes{flex:1;display:flex;min-height:0}
+.tab-pane{display:none;flex:1;gap:12px;min-height:0}
+.tab-pane.active{display:flex}
+
+/* ── Canvas area (shared) ── */
+.canvas-area{flex:1;background:#16161f;border-radius:12px;border:1px solid #2a2a3a;display:flex;flex-direction:column;overflow:hidden;min-width:0;position:relative}
+.canvas-area .drop-zone{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;transition:background .2s;position:relative;min-height:400px}
+.canvas-area .drop-zone:hover{background:#1c1c28}
+.canvas-area .drop-zone.dragover{background:#1e1e30}
+.drop-placeholder .icon{font-size:48px;opacity:.4}
+.drop-placeholder p{color:#7c7c9a;font-size:14px;margin-top:6px}
+.drop-placeholder .sub{font-size:12px;color:#555;margin-top:4px}
+.canvas-area canvas{display:none;width:100%;height:100%;object-fit:contain}
+.canvas-area.has-image canvas{display:block;cursor:crosshair}
+.canvas-area.has-image .drop-placeholder{display:none}
+.file-label{position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);padding:4px 14px;border-radius:20px;font-size:11px;color:#aaa;white-space:nowrap;max-width:70%;overflow:hidden;text-overflow:ellipsis;pointer-events:none}
+.guide-hint{position:absolute;top:10px;left:50%;transform:translateX(-50%);background:#6c6cff;padding:5px 18px;border-radius:20px;font-size:12px;display:none;pointer-events:none;z-index:5}
+.guide-hint.active{display:block}
+
+/* ── Panel (shared) ── */
+.panel{width:320px;flex-shrink:0;background:#16161f;border-radius:12px;border:1px solid #2a2a3a;padding:14px;display:flex;flex-direction:column;gap:10px;overflow-y:auto;max-height:calc(100vh - 90px)}
+.panel h2{font-size:13px;font-weight:600;color:#c0c0d0;display:flex;align-items:center;gap:6px}
+.section{border-top:1px solid #242436;padding-top:10px}
+.section:first-of-type,.section.no-border{border-top:none;padding-top:0}
+.form-group{display:flex;flex-direction:column;gap:3px}
+.form-group label{font-size:11px;color:#8888aa;font-weight:500}
+.form-group select,.form-group input[type="number"]{padding:6px 10px;border-radius:8px;border:1px solid #2a2a3a;background:#0f0f13;color:#e0e0e0;font-size:12px;outline:none;transition:border .2s}
+.form-group select:focus,.form-group input:focus{border-color:#6c6cff}
+.row2{display:flex;gap:8px}
+.row2 .form-group{flex:1}
+.param-group{display:none;flex-direction:column;gap:8px}
+.param-group.active{display:flex}
+
+/* ── Buttons ── */
+.btn-primary{padding:10px;border:none;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;background:#6c6cff;color:#fff;transition:all .2s;display:flex;align-items:center;justify-content:center;gap:6px}
+.btn-primary:hover{background:#7c7cff}
+.btn-primary:disabled{opacity:.4;cursor:not-allowed}
+.btn-primary.loading .spinner{display:inline-block}
+.btn-primary.loading .label-text{opacity:.7}
+.spinner{display:none;width:14px;height:14px;border:2px solid rgba(255,255,255,.3);border-top-color:#fff;border-radius:50%;animation:spin .7s linear infinite}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+.btn-sm{padding:5px 10px;border-radius:6px;border:1px solid #2a2a3a;background:#0f0f13;color:#aaa;font-size:11px;cursor:pointer;transition:all .15s}
+.btn-sm:hover{border-color:#555;color:#ddd}
+.btn-sm.active{background:#6c6cff22;border-color:#6c6cff;color:#fff}
+.btn-del{border:none;background:rgba(255,60,60,.15);color:#f66;width:22px;height:22px;border-radius:4px;cursor:pointer;font-size:13px;line-height:1;transition:background .15s}
+.btn-del:hover{background:rgba(255,60,60,.3)}
+.btn-clear{border:none;background:transparent;color:#666;font-size:11px;cursor:pointer;padding:3px;text-align:right}
+.btn-clear:hover{color:#f66}
+
+/* ── Guide tools ── */
+.guide-tools{display:flex;gap:6px}
+.guide-btn{flex:1;padding:7px;border-radius:6px;border:1px solid #2a2a3a;background:#0f0f13;color:#aaa;font-size:11px;cursor:pointer;text-align:center;transition:all .15s;font-weight:500}
+.guide-btn:hover{border-color:#555;color:#ddd}
+.guide-btn.active{background:#6c6cff22;border-color:#6c6cff;color:#fff}
+.guide-btn .key{font-size:9px;opacity:.5;display:block;margin-top:1px}
+.guide-list{display:flex;flex-direction:column;gap:3px;max-height:120px;overflow-y:auto;min-height:0}
+.guide-list:empty::after{content:'Chưa có guide — click canvas để đặt';display:block;font-size:11px;color:#555;text-align:center;padding:6px;font-style:italic}
+.guide-item{display:flex;align-items:center;gap:5px;background:#0f0f13;border-radius:5px;padding:3px 6px;border:1px solid #1e1e2e}
+.guide-item .gc{width:20px;height:18px;padding:0;border:none;border-radius:3px;cursor:pointer}
+.guide-item .gl{flex:1;font-size:10px;color:#aaa}
+
+/* ── Region tools ── */
+.region-tools{display:flex;gap:6px}
+.region-btn{flex:1;padding:7px;border-radius:6px;border:1px solid #2a2a3a;background:#0f0f13;color:#aaa;font-size:11px;cursor:pointer;text-align:center;transition:all .15s}
+.region-btn:hover{border-color:#555;color:#ddd}
+.region-btn.active,.region-btn.selected{background:#4ecdc422;border-color:#4ecdc4;color:#4ecdc4}
+.region-list{display:flex;flex-direction:column;gap:3px;max-height:150px;overflow-y:auto;min-height:0}
+.region-list:empty::after{content:'Chưa có region — chọn tool & vẽ lên canvas';display:block;font-size:11px;color:#555;text-align:center;padding:8px;font-style:italic}
+.region-item{display:flex;align-items:center;gap:5px;background:#0f0f13;border-radius:5px;padding:4px 6px;border:1px solid #1e1e2e}
+.region-item .rc{width:20px;height:18px;padding:0;border:none;border-radius:3px;cursor:pointer}
+.region-item .rl{flex:1;font-size:10px;color:#aaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.region-item .rl b{color:#ddd}
+.region-item.selected{border-color:#4ecdc4;background:#4ecdc408}
+
+.region-label-input{display:flex;gap:6px}
+.region-label-input input{flex:1;padding:5px 8px;border-radius:6px;border:1px solid #2a2a3a;background:#0f0f13;color:#e0e0e0;font-size:11px;outline:none}
+.region-label-input input:focus{border-color:#6c6cff}
+
+.prompt-box{background:#0f0f13;border-radius:8px;border:1px solid #2a2a3a;padding:8px;min-height:60px;font-size:11px;color:#ccc;font-family:monospace;white-space:pre-wrap;word-break:break-all;overflow-y:auto;max-height:120px;user-select:text}
+.prompt-label{font-size:11px;color:#8888aa;display:flex;justify-content:space-between;align-items:center}
+
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(80px);background:#2a2a3a;color:#e0e0e0;padding:8px 22px;border-radius:10px;font-size:13px;opacity:0;transition:all .4s;pointer-events:none;z-index:100}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+@media(max-width:860px){.tab-pane{flex-direction:column}.panel{width:100%;max-height:none}}
+</style>
+</head>
+<body>
+
+<header>
+    <h1>🛠️ Drawing Tools</h1>
+    <span>grid, perspective, guide lines & region select</span>
+</header>
+
+<div class="app">
+
+<!-- ═══ Tab Bar ═══ -->
+<div class="tab-bar">
+    <button class="tab active" data-tab="grid">📐 GridDrawPro</button>
+    <button class="tab" data-tab="region">✏️ Region Select</button>
+</div>
+
+<div class="tab-panes">
+
+<!-- ════════════════════ TAB: GRID ════════════════════ -->
+<div class="tab-pane active" id="pane-grid">
+    <div class="canvas-area" id="gridCanvasArea">
+        <div class="drop-zone" id="gridDrop">
+            <div class="drop-placeholder">
+                <div class="icon">🖼️</div>
+                <p>Kéo thả ảnh hoặc click để chọn</p>
+                <div class="sub">PNG, JPG, WebP</div>
+            </div>
+            <canvas id="gridCanvas"></canvas>
+            <div class="file-label" id="gridFileLabel" style="display:none;"></div>
+            <input type="file" id="gridFileInput" accept="image/*" style="display:none"/>
+        </div>
+        <div class="guide-hint" id="gridGuideHint">📏 Click canvas để đặt guide, Esc thoát</div>
+    </div>
+
+    <div class="panel" style="max-height:calc(100vh - 90px)">
+        <!-- Grid type -->
+        <div class="section no-border">
+            <div class="form-group">
+                <label for="gridType">Kiểu Grid</label>
+                <select id="gridType">
+                    <option value="cross">Cross — Dọc + Ngang</option>
+                    <option value="vertical">Vertical — Dọc</option>
+                    <option value="horizontal">Horizontal — Ngang</option>
+                    <option value="diagonal">Diagonal — Chéo</option>
+                    <option value="1-point">🎯 1-Point Perspective</option>
+                    <option value="2-point">🎯 2-Point Perspective</option>
+                    <option value="3-point">🎯 3-Point Perspective</option>
+                </select>
+            </div>
+        </div>
+
+        <!-- Simple params -->
+        <div class="section param-group" id="simpleParams">
+            <div class="row2">
+                <div class="form-group" id="rowsGroup"><label for="rows">Rows</label><input type="number" id="rows" value="4" min="1" max="50"/></div>
+                <div class="form-group" id="colsGroup"><label for="cols">Columns</label><input type="number" id="cols" value="4" min="1" max="50"/></div>
+            </div>
+        </div>
+        <div class="section param-group" id="diagonalParams">
+            <div class="form-group"><label for="spacing">Spacing (px)</label><input type="number" id="spacing" value="40" min="5" max="500"/></div>
+        </div>
+        <div class="section param-group" id="point1Params">
+            <div class="form-group"><label>VP (%)</label><div class="row2"><input type="number" id="vpX" value="50" min="0" max="100"/><input type="number" id="vpY" value="50" min="0" max="100"/></div></div>
+            <div class="row2"><div class="form-group"><label for="radial">Rays</label><input type="number" id="radial" value="12" min="3" max="48"/></div><div class="form-group"><label for="depth">Depth</label><input type="number" id="depth" value="0" min="0" max="20"/></div></div>
+        </div>
+        <div class="section param-group" id="point2Params">
+            <div class="form-group"><label for="horizonY">Horizon Y%</label><input type="number" id="horizonY" value="50" min="0" max="100"/></div>
+            <div class="row2"><input type="number" id="vp1X" value="25" min="0" max="100"/><input type="number" id="vp2X" value="75" min="0" max="100"/></div>
+            <div class="row2"><div class="form-group"><label for="perspDivisions">Divisions</label><input type="number" id="perspDivisions" value="8" min="2" max="30"/></div><div class="form-group" style="flex-direction:row;align-items:center;gap:5px;padding-top:14px"><input type="checkbox" id="enableVerticals" checked/><label for="enableVerticals" style="font-size:11px">Verticals</label></div></div>
+        </div>
+        <div class="section param-group" id="point3Params">
+            <div class="form-group"><label>VP1 (trên-trái)</label><div class="row2"><input type="number" id="vp1_3x" value="25" min="0" max="100"/><input type="number" id="vp1_3y" value="25" min="0" max="100"/></div></div>
+            <div class="form-group"><label>VP2 (trên-phải)</label><div class="row2"><input type="number" id="vp2_3x" value="75" min="0" max="100"/><input type="number" id="vp2_3y" value="25" min="0" max="100"/></div></div>
+            <div class="form-group"><label>VP3 (dưới)</label><div class="row2"><input type="number" id="vp3_3x" value="50" min="0" max="100"/><input type="number" id="vp3_3y" value="75" min="0" max="100"/></div></div>
+            <div class="form-group"><label for="perspDivisions3">Divisions</label><input type="number" id="perspDivisions3" value="6" min="2" max="20"/></div>
+        </div>
+
+        <!-- Guide Lines -->
+        <div class="section">
+            <h2>📏 Guide Lines</h2>
+            <div class="guide-tools">
+                <button class="guide-btn" id="guideVBtn">┃ Dọc<span class="key">V</span></button>
+                <button class="guide-btn" id="guideHBtn">━ Ngang<span class="key">H</span></button>
+            </div>
+            <div class="guide-list" id="guideList"></div>
+            <button class="btn-clear" id="clearGuides">🗑 Xoá tất cả</button>
+        </div>
+
+        <!-- Style -->
+        <div class="section">
+            <div class="row2" style="align-items:center">
+                <input type="color" id="gridLineColor" value="#ff4444" style="width:40px;height:32px;padding:2px;border-radius:6px;border:1px solid #2a2a3a;background:#0f0f13;cursor:pointer"/>
+                <div class="form-group" style="flex:1"><label for="gridLineWidth">Width</label><input type="number" id="gridLineWidth" value="2" min="1" max="10"/></div>
+            </div>
+        </div>
+
+        <button class="btn-primary" id="gridDownloadBtn"><span class="spinner"></span><span class="label-text">⬇️ Download Ảnh + Grid</span></button>
+        <div style="font-size:10px;color:#555;text-align:center">Preview realtime — Download để lưu ảnh gốc</div>
+    </div>
+</div>
+
+<!-- ════════════════════ TAB: REGION ════════════════════ -->
+<div class="tab-pane" id="pane-region">
+    <div class="canvas-area" id="regionCanvasArea">
+        <div class="drop-zone" id="regionDrop">
+            <div class="drop-placeholder">
+                <div class="icon">🖼️</div>
+                <p>Kéo thả ảnh hoặc click để chọn</p>
+                <div class="sub">PNG, JPG, WebP</div>
+            </div>
+            <canvas id="regionCanvas"></canvas>
+            <div class="file-label" id="regionFileLabel" style="display:none;"></div>
+            <input type="file" id="regionFileInput" accept="image/*" style="display:none"/>
+        </div>
+    </div>
+
+    <div class="panel" style="max-height:calc(100vh - 90px)">
+        <!-- Selection tools -->
+        <div class="section no-border">
+            <h2>✏️ Selection Tools</h2>
+            <div class="region-tools">
+                <button class="region-btn" data-tool="rect">▭ Rect</button>
+                <button class="region-btn" data-tool="ellipse">⬭ Ellipse</button>
+                <button class="region-btn" data-tool="polygon">✎ Freehand</button>
+                <button class="region-btn" data-tool="select">👆 Select</button>
+            </div>
+            <div style="font-size:10px;color:#666;margin-top:4px">
+                <span id="regionToolHint">Chọn tool, click-drag lên canvas để tạo region</span>
+            </div>
+        </div>
+
+        <!-- Region list -->
+        <div class="section">
+            <h2>📋 Regions <span id="regionCount" style="color:#888;font-weight:400;font-size:11px"></span></h2>
+            <div class="region-list" id="regionList"></div>
+            <button class="btn-clear" id="clearRegions">🗑 Xoá tất cả</button>
+        </div>
+
+        <!-- Label for selected region -->
+        <div class="section region-label-input" id="regionLabelRow" style="display:none">
+            <input type="text" id="regionLabelInput" placeholder="Ghi chú cho region này..." />
+            <button class="btn-sm" id="applyRegionLabel">Lưu</button>
+        </div>
+
+        <!-- Style note -->
+        <div class="section">
+            <div class="form-group">
+                <label for="imageStyle">🎨 Style / chất liệu ảnh gốc (nếu có)</label>
+                <input type="text" id="imageStyle" placeholder="VD: anime, watercolor, ảnh thật, pixel art..." />
+                <div style="font-size:10px;color:#555;margin-top:2px;">Gemini sẽ giữ nguyên style này khi edit region</div>
+            </div>
+        </div>
+
+        <!-- Prompt output -->
+        <div class="section">
+            <div class="prompt-label"><span>📝 Prompt cho Gemini</span><button class="btn-sm" id="copyPrompt">📋 Copy</button></div>
+            <div class="prompt-box" id="promptOutput">Chưa có region nào</div>
+            <div style="font-size:10px;color:#555;margin-top:4px;">
+                ① Vẽ region → ② Ghi chú mô tả từng vùng → ③ Copy prompt → ④ Download ảnh → ⑤ Upload cả 2 lên Gemini chat
+            </div>
+        </div>
+
+        <div class="row2" style="gap:6px">
+            <button class="btn-primary" id="regionCopyBtn" style="flex:1;font-size:12px">
+                <span class="spinner"></span><span class="label-text">📋 Copy ảnh</span>
+            </button>
+            <button class="btn-primary" id="regionDownloadBtn" style="flex:1;font-size:12px">
+                <span class="spinner"></span><span class="label-text">⬇️ Download</span>
+            </button>
+        </div>
+    </div>
+</div>
+
+</div><!-- /tab-panes -->
+</div><!-- /app -->
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+//  HELPERS
+// ═══════════════════════════════════════════════════════════════
+const $ = id => document.getElementById(id);
+const toast = $('toast');
+let toastTimer;
+
+function showToast(msg, d=2500){toast.textContent=msg;toast.classList.add('show');clearTimeout(toastTimer);toastTimer=setTimeout(()=>toast.classList.remove('show'),d)}
+
+function getCanvasPos(canvas, e){
+    const rect = canvas.getBoundingClientRect();
+    return {x:(e.clientX-rect.left)*(canvas.width/rect.width), y:(e.clientY-rect.top)*(canvas.height/rect.height)};
+}
+
+function perspectiveSpacing(s,e,n,p=1.8){const r=[];for(let i=1;i<=n;i++)r.push(s+(e-s)*Math.pow(i/(n+1),p));return r}
+
+// ── Tab switching ──
+document.querySelectorAll('.tab').forEach(tab=>{
+    tab.addEventListener('click',()=>{
+        document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+        document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+        tab.classList.add('active');
+        $(`pane-${tab.dataset.tab}`).classList.add('active');
+        // resize canvas after tab switch
+        setTimeout(()=>{if(window['resizeGridCanvas'])resizeGridCanvas();if(window['resizeRegionCanvas'])resizeRegionCanvas()},50);
+    });
+});
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB 1 — GRID (existing logic, cleaned)
+// ═══════════════════════════════════════════════════════════════
+(function(){
+const canvas=$('gridCanvas'), ctx=canvas.getContext('2d');
+const drop=$('gridDrop'), fileInput=$('gridFileInput'), fileLabel=$('gridFileLabel'), canvasArea=$('gridCanvasArea');
+const guideHint=$('gridGuideHint');
+
+let sourceImage=null;
+let guides=[], nextGuideId=1, guideTool=null, guidePreview=null;
+
+// inputs
+const gridType=$('gridType'), rows=$('rows'), cols=$('cols'), spacing=$('spacing');
+const gridLineWidth=$('gridLineWidth'), gridLineColor=$('gridLineColor');
+const vpX=$('vpX'), vpY=$('vpY'), radial=$('radial'), depth=$('depth');
+const horizonY=$('horizonY'), vp1X=$('vp1X'), vp2X=$('vp2X'), perspDivisions=$('perspDivisions'), enableVerticals=$('enableVerticals');
+const v1x=$('vp1_3x'),v1y=$('vp1_3y'),v2x=$('vp2_3x'),v2y=$('vp2_3y'),v3x=$('vp3_3x'),v3y=$('vp3_3y'),pd3=$('perspDivisions3');
+
+const allParams=document.querySelectorAll('#pane-grid .param-group');
+const simpleParams=$('simpleParams'),diagonalParams=$('diagonalParams'),point1Params=$('point1Params'),point2Params=$('point2Params'),point3Params=$('point3Params');
+
+// File
+drop.addEventListener('click',e=>{if(!guideTool)fileInput.click()});
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('dragover')});
+drop.addEventListener('dragleave',()=>drop.classList.remove('dragover'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('dragover');if(e.dataTransfer.files.length)loadFile(e.dataTransfer.files[0])});
+fileInput.addEventListener('change',()=>{if(fileInput.files.length)loadFile(fileInput.files[0])});
+
+function loadFile(file){
+    if(!file.type.startsWith('image/'))return showToast('Vui lòng chọn file ảnh');
+    const r=new FileReader();
+    r.onload=e=>{const img=new Image();img.onload=()=>{sourceImage=img;fileLabel.textContent=`${file.name} (${img.width}×${img.height})`;fileLabel.style.display='block';canvasArea.classList.add('has-image');resizeCanvas();redraw();showToast(`✅ ${file.name}`)};img.src=e.target.result};
+    r.readAsDataURL(file);
+}
+
+window.resizeGridCanvas=function(){
+    if(!sourceImage)return;
+    const rect=drop.getBoundingClientRect();
+    const maxW=rect.width-16,maxH=rect.height-16;
+    const s=Math.min(maxW/sourceImage.width,maxH/sourceImage.height,1);
+    canvas.width=sourceImage.width*s; canvas.height=sourceImage.height*s;
+    canvas.style.width=canvas.width+'px'; canvas.style.height=canvas.height+'px';
+};
+
+// Guide tools
+function setGuide(t){
+    if(guideTool===t)guideTool=null; else guideTool=t;
+    $('guideVBtn').classList.toggle('active',guideTool==='v');
+    $('guideHBtn').classList.toggle('active',guideTool==='h');
+    guideHint.classList.toggle('active',guideTool!==null);
+    guidePreview=null; if(!guideTool)redraw();
+}
+$('guideVBtn').addEventListener('click',()=>setGuide('v'));
+$('guideHBtn').addEventListener('click',()=>setGuide('h'));
+
+canvas.addEventListener('click',e=>{
+    e.stopPropagation();
+    if(!guideTool||!sourceImage)return;
+    const p=getCanvasPos(canvas,e),id=nextGuideId++,c=gridLineColor.value;
+    guides.push({id,type:guideTool==='v'?'v':'h',pos:Math.round(guideTool==='v'?p.x:p.y),color:c});
+    renderGuideList();redraw();showToast(`✅ Guide ${guideTool==='v'?'dọc':'ngang'}`);
+});
+canvas.addEventListener('mousemove',e=>{guidePreview=guideTool?getCanvasPos(canvas,e):null;if(guideTool)redraw()});
+canvas.addEventListener('mouseleave',()=>{guidePreview=null;if(guideTool)redraw()});
+
+function renderGuideList(){
+    const el=$('guideList');
+    if(!guides.length){el.innerHTML='';return}
+    el.innerHTML=guides.map(g=>`<div class="guide-item"><input type="color" class="gc" value="${g.color}" data-id="${g.id}"/><span class="gl">${g.type==='v'?'Dọc':'Ngang'} @ ${g.pos}px</span><button class="btn-del" data-id="${g.id}">✕</button></div>`).join('');
+    el.querySelectorAll('.gc').forEach(inp=>{inp.addEventListener('input',e=>{const g=guides.find(x=>x.id===parseInt(e.target.dataset.id));if(g){g.color=e.target.value;redraw()}})});
+    el.querySelectorAll('.btn-del').forEach(btn=>{btn.addEventListener('click',e=>{const id=parseInt(e.target.dataset.id);guides=guides.filter(x=>x.id!==id);renderGuideList();redraw()})});
+}
+$('clearGuides').addEventListener('click',()=>{if(guides.length){guides=[];renderGuideList();redraw();showToast('🗑 Đã xoá guides')}});
+
+// Grid type
+function updateParams(){
+    const t=gridType.value;
+    allParams.forEach(p=>p.classList.remove('active'));
+    if(['cross','vertical','horizontal'].includes(t)){simpleParams.classList.add('active');$('rowsGroup').style.display=(t==='horizontal'||t==='cross')?'':'none';$('colsGroup').style.display=(t==='vertical'||t==='cross')?'':'none'}
+    if(t==='diagonal')diagonalParams.classList.add('active');
+    if(t==='1-point')point1Params.classList.add('active');
+    if(t==='2-point')point2Params.classList.add('active');
+    if(t==='3-point')point3Params.classList.add('active');
+    redraw();
+}
+gridType.addEventListener('change',updateParams);
+
+// Drawing
+function drawGrid(c,w,h,pr){
+    const type=pr.type,color=pr.color||'#ff4444',lw=pr.lineWidth||2;
+    c.strokeStyle=color; c.lineWidth=lw;
+    if(type==='vertical'){const n=pr.cols;for(let i=1;i<=n;i++){const x=i*w/(n+1);c.beginPath();c.moveTo(x,0);c.lineTo(x,h);c.stroke()}}
+    else if(type==='horizontal'){const n=pr.rows;for(let i=1;i<=n;i++){const y=i*h/(n+1);c.beginPath();c.moveTo(0,y);c.lineTo(w,y);c.stroke()}}
+    else if(type==='cross'){const nr=pr.rows,nc=pr.cols;for(let i=1;i<=nc;i++){const x=i*w/(nc+1);c.beginPath();c.moveTo(x,0);c.lineTo(x,h);c.stroke()}for(let i=1;i<=nr;i++){const y=i*h/(nr+1);c.beginPath();c.moveTo(0,y);c.lineTo(w,y);c.stroke()}}
+    else if(type==='diagonal'){const s=pr.spacing||40;c.lineWidth=Math.max(1,lw/2);for(let i=-h;i<w+s;i+=s){c.beginPath();c.moveTo(i,0);c.lineTo(i+h,h);c.stroke()}for(let i=0;i<w+h+s;i+=s){c.beginPath();c.moveTo(i,0);c.lineTo(i-h,h);c.stroke()}c.lineWidth=lw}
+    else if(type==='1-point'){const vpx=pr.vpX*w/100,vpy=pr.vpY*h/100,rn=pr.radial,dn=pr.depth;
+        c.strokeStyle='rgba(255,255,0,0.7)';c.lineWidth=lw;c.beginPath();c.moveTo(0,vpy);c.lineTo(w,vpy);c.stroke();c.strokeStyle=color;
+        c.lineWidth=Math.max(1,lw/2);for(let i=0;i<rn;i++){const a=2*Math.PI*i/rn;c.beginPath();c.moveTo(vpx,vpy);c.lineTo(vpx+Math.cos(a)*(w+h),vpy+Math.sin(a)*(w+h));c.stroke()}
+        if(dn>0){c.lineWidth=lw;for(const yp of perspectiveSpacing(vpy,h,dn)){c.beginPath();c.moveTo(0,yp);c.lineTo(w,yp);c.stroke()}}}
+    else if(type==='2-point'){const hy=pr.horizonY*h/100,v1x=pr.vp1X*w/100,v2x=pr.vp2X*w/100,divs=pr.divisions;
+        c.strokeStyle='rgba(255,255,0,0.7)';c.lineWidth=lw;c.beginPath();c.moveTo(0,hy);c.lineTo(w,hy);c.stroke();c.strokeStyle=color;
+        const rf=(vpx,sgn)=>{c.lineWidth=Math.max(1,lw/2);for(let i=1;i<=divs;i++){const t=i/(divs+1);for(const[tx,ty]of[[vpx+sgn*(w-vpx)*t,hy],[vpx,hy+(h-hy)*t],[vpx,hy-hy*t]]){c.beginPath();c.moveTo(vpx,hy);c.lineTo(tx,ty);c.stroke();c.beginPath();c.moveTo(vpx,hy);c.lineTo(vpx-(tx-vpx),ty);c.stroke()}}};
+        rf(v1x,1);rf(v2x,-1);
+        if(pr.verticals){c.lineWidth=Math.max(1,lw/3);const vc=Math.max(2,Math.floor(divs/2));for(let i=1;i<=vc;i++){const t=i/(vc+1);for(const bx of[v1x+t*(w-v1x),v2x-t*v2x,v1x+t*(v2x-v1x)]){c.beginPath();c.moveTo(bx,0);c.lineTo(bx,h);c.stroke()}}c.lineWidth=lw}}
+    else if(type==='3-point'){const vps=[[pr.vp1x*w/100,pr.vp1y*h/100],[pr.vp2x*w/100,pr.vp2y*h/100],[pr.vp3x*w/100,pr.vp3y*h/100]],divs=pr.divisions;
+        c.lineWidth=Math.max(1,lw/2);for(const[vx,vy]of vps){for(let i=1;i<=divs;i++){const t=i/(divs+1);for(const[tx,ty]of[[vx+(w-vx)*t,vy+(h-vy)*t],[vx-vx*t,vy+(h-vy)*t],[vx+(w-vx)*t,vy-vy*t],[vx-vx*t,vy-vy*t],[vx,vy+(h-vy)*t],[vx,vy-vy*t],[vx+(w-vx)*t,vy],[vx-vx*t,vy]]){c.beginPath();c.moveTo(vx,vy);c.lineTo(tx,ty);c.stroke()}}}}
+}
+
+function drawGuides(c,w,h){
+    for(const g of guides){c.strokeStyle=g.color;c.lineWidth=2;if(g.type==='v'){c.beginPath();c.moveTo(g.pos,0);c.lineTo(g.pos,h);c.stroke()}else{c.beginPath();c.moveTo(0,g.pos);c.lineTo(w,g.pos);c.stroke()}}
+    if(guideTool&&guidePreview){
+        c.strokeStyle=gridLineColor.value+'88';c.lineWidth=2;c.setLineDash([5,4]);
+        if(guideTool==='v'){c.beginPath();c.moveTo(guidePreview.x,0);c.lineTo(guidePreview.x,h);c.stroke()}else{c.beginPath();c.moveTo(0,guidePreview.y);c.lineTo(w,guidePreview.y);c.stroke()}
+        c.setLineDash([])}
+}
+
+function getGridParams(){
+    const t=gridType.value,b={type:t,lineWidth:parseInt(gridLineWidth.value)||2,color:gridLineColor.value};
+    if(t==='vertical')return{...b,cols:parseInt(cols.value)||4};
+    if(t==='horizontal')return{...b,rows:parseInt(rows.value)||4};
+    if(t==='cross')return{...b,rows:parseInt(rows.value)||4,cols:parseInt(cols.value)||4};
+    if(t==='diagonal')return{...b,spacing:parseInt(spacing.value)||40};
+    if(t==='1-point')return{...b,vpX:parseInt(vpX.value)||50,vpY:parseInt(vpY.value)||50,radial:parseInt(radial.value)||12,depth:parseInt(depth.value)||0};
+    if(t==='2-point')return{...b,horizonY:parseInt(horizonY.value)||50,vp1X:parseInt(vp1X.value)||25,vp2X:parseInt(vp2X.value)||75,divisions:parseInt(perspDivisions.value)||8,verticals:enableVerticals.checked};
+    if(t==='3-point')return{...b,vp1x:parseInt(v1x.value)||25,vp1y:parseInt(v1y.value)||25,vp2x:parseInt(v2x.value)||75,vp2y:parseInt(v2y.value)||25,vp3x:parseInt(v3x.value)||50,vp3y:parseInt(v3y.value)||75,divisions:parseInt(pd3.value)||6};
+    return b;
+}
+
+let redrawTimer=null;
+function redraw(){
+    if(!sourceImage)return;
+    clearTimeout(redrawTimer);
+    redrawTimer=setTimeout(()=>{const w=canvas.width,h=canvas.height;ctx.clearRect(0,0,w,h);ctx.drawImage(sourceImage,0,0,w,h);drawGrid(ctx,w,h,getGridParams());drawGuides(ctx,w,h)},20);
+}
+
+document.querySelectorAll('#pane-grid .panel input, #pane-grid .panel select').forEach(el=>{el.addEventListener('input',redraw);el.addEventListener('change',redraw)});
+
+let resizeTimer=null;window.addEventListener('resize',()=>{clearTimeout(resizeTimer);resizeTimer=setTimeout(()=>{resizeCanvas();redraw()},150)});
+
+// Download
+$('gridDownloadBtn').addEventListener('click',async()=>{
+    if(!sourceImage)return showToast('Vui lòng chọn ảnh trước');
+    const btn=$('gridDownloadBtn');btn.classList.add('loading');btn.disabled=true;
+    const r=await fetch(sourceImage.src);const blob=await r.blob();
+    const f=new FormData();f.append('image',blob,'image.png');
+    const p=getGridParams();
+    const ap=(k,v)=>f.append(k,v);
+    ap('grid_type',p.type);ap('color',p.color);ap('line_width',p.lineWidth);
+    if(p.rows!==undefined)ap('rows',p.rows);if(p.cols!==undefined)ap('cols',p.cols);if(p.spacing!==undefined)ap('spacing',p.spacing);
+    if(p.vpX!==undefined){ap('vp_x',Math.round(p.vpX*sourceImage.width/100));ap('vp_y',Math.round(p.vpY*sourceImage.height/100));ap('radial',p.radial);ap('depth',p.depth)}
+    if(p.horizonY!==undefined){ap('horizon_y',Math.round(p.horizonY*sourceImage.height/100));ap('vp1_x',Math.round(p.vp1X*sourceImage.width/100));ap('vp2_x',Math.round(p.vp2X*sourceImage.width/100));ap('divisions',p.divisions);ap('verticals',p.verticals?'1':'0')}
+    if(p.vp1x!==undefined){ap('vp1_x',Math.round(p.vp1x*sourceImage.width/100));ap('vp1_y',Math.round(p.vp1y*sourceImage.height/100));ap('vp2_x',Math.round(p.vp2x*sourceImage.width/100));ap('vp2_y',Math.round(p.vp2y*sourceImage.height/100));ap('vp3_x',Math.round(p.vp3x*sourceImage.width/100));ap('vp3_y',Math.round(p.vp3y*sourceImage.height/100));ap('divisions',p.divisions)}
+    f.append('guides',JSON.stringify(guides.map(g=>({type:g.type,pos:g.pos,color:g.color}))));
+    f.append('regions','[]');
+    try{const res=await fetch('/draw-grid',{method:'POST',body:f});if(!res.ok)throw Error('Server error');const bo=await res.blob();const u=URL.createObjectURL(bo);const a=document.createElement('a');a.href=u;a.download='grid-result.png';a.click();URL.revokeObjectURL(u);showToast('✅ Tải xuống thành công!')}catch(e){showToast('❌ '+e.message)}finally{btn.classList.remove('loading');btn.disabled=false}
+});
+
+// Keyboard
+document.addEventListener('keydown',e=>{
+    if(e.key==='Escape'&&guideTool)setGuide(null);
+    if((e.key==='v'||e.key==='V')&&$('pane-grid').classList.contains('active'))setGuide('v');
+    if((e.key==='h'||e.key==='H')&&$('pane-grid').classList.contains('active'))setGuide('h');
+});
+
+updateParams();
+console.log('📐 Grid tab ready');
+})();
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB 2 — REGION SELECT
+// ═══════════════════════════════════════════════════════════════
+(function(){
+const canvas=$('regionCanvas'), ctx=canvas.getContext('2d');
+const drop=$('regionDrop'), fileInput=$('regionFileInput'), fileLabel=$('regionFileLabel'), canvasArea=$('regionCanvasArea');
+let sourceImage=null;
+let regions=[], nextRegionId=1;
+let activeTool=null; // 'rect' | 'ellipse' | 'polygon' | 'select'
+let drawing=false, startPoint=null, currentPoints=[];
+let selectedRegionId=null;
+
+const REGION_COLORS=['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7','#DDA0DD','#F7DC6F','#BB8FCE','#85C1E9','#F0B27A','#82E0AA','#E74C3C'];
+
+function getRegionColor(i){return REGION_COLORS[i%REGION_COLORS.length]}
+
+// Tool buttons
+document.querySelectorAll('#pane-region .region-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+        const tool=btn.dataset.tool;
+        if(activeTool===tool){activeTool=null;document.querySelectorAll('#pane-region .region-btn').forEach(b=>b.classList.remove('selected'));$('regionToolHint').textContent='Chọn tool, click-drag lên canvas để tạo region';return}
+        activeTool=tool;
+        document.querySelectorAll('#pane-region .region-btn').forEach(b=>b.classList.remove('selected'));
+        btn.classList.add('selected');
+        const hints={'rect':'▭ Click & drag để vẽ hình chữ nhật','ellipse':'⬭ Click & drag để vẽ ellipse','polygon':'✎ Click & drag để vẽ tự do','select':'👆 Click vào region để chọn / xem thông tin'};
+        $('regionToolHint').textContent=hints[tool]||'';
+        selectedRegionId=null;updateRegionList();redraw();
+    });
+});
+
+// File
+drop.addEventListener('click',()=>{if(!drawing)fileInput.click()});
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('dragover')});
+drop.addEventListener('dragleave',()=>drop.classList.remove('dragover'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('dragover');if(e.dataTransfer.files.length)loadFile(e.dataTransfer.files[0])});
+fileInput.addEventListener('change',()=>{if(fileInput.files.length)loadFile(fileInput.files[0])});
+
+function loadFile(file){
+    if(!file.type.startsWith('image/'))return showToast('Vui lòng chọn file ảnh');
+    const r=new FileReader();
+    r.onload=e=>{const img=new Image();img.onload=()=>{sourceImage=img;regions=[];nextRegionId=1;selectedRegionId=null;fileLabel.textContent=`${file.name} (${img.width}×${img.height})`;fileLabel.style.display='block';canvasArea.classList.add('has-image');window.resizeRegionCanvas();updateRegionList();updatePrompt();redraw();showToast(`✅ ${file.name}`)};img.src=e.target.result};
+    r.readAsDataURL(file);
+}
+
+window.resizeRegionCanvas=function(){
+    if(!sourceImage)return;
+    const rect=drop.getBoundingClientRect();
+    const maxW=rect.width-16,maxH=rect.height-16;
+    const s=Math.min(maxW/sourceImage.width,maxH/sourceImage.height,1);
+    canvas.width=sourceImage.width*s; canvas.height=sourceImage.height*s;
+    canvas.style.width=canvas.width+'px'; canvas.style.height=canvas.height+'px';
+};
+
+// ── Canvas Interaction ──
+canvas.addEventListener('mousedown',e=>{
+    e.stopPropagation();
+    if(!sourceImage||!activeTool)return;
+    const pos=getCanvasPos(canvas,e);
+
+    if(activeTool==='select'){
+        // Find clicked region
+        const imgPos=imgFromCanvas(pos);
+        let found=null;
+        for(let i=regions.length-1;i>=0;i--){
+            const r=regions[i];
+            if(pointInRegion(imgPos,r)){found=r.id;break}
+        }
+        selectedRegionId=found;
+        updateRegionList();
+        showRegionLabel(found);
+        redraw();
+        return;
+    }
+
+    drawing=true;
+    startPoint=pos;
+    if(activeTool==='polygon'){currentPoints=[imgFromCanvas(pos)]}
+});
+
+canvas.addEventListener('mousemove',e=>{
+    if(!drawing||!sourceImage||!activeTool)return;
+    const pos=getCanvasPos(canvas,e);
+
+    if(activeTool==='polygon'){
+        currentPoints.push(imgFromCanvas(pos));
+    }
+    redraw();
+});
+
+canvas.addEventListener('mouseup',e=>{
+    if(!drawing||!sourceImage)return;
+    drawing=false;
+    if(!activeTool||activeTool==='select')return;
+
+    const pos=getCanvasPos(canvas,e);
+    const imgStart=imgFromCanvas(startPoint);
+    const imgEnd=imgFromCanvas(pos);
+
+    const dx=Math.abs(imgEnd.x-imgStart.x), dy=Math.abs(imgEnd.y-imgStart.y);
+    if(dx<3&&dy<3)return; // too small, ignore
+
+    const color=getRegionColor(regions.length);
+    const id=nextRegionId++;
+
+    if(activeTool==='rect'){
+        const x1=Math.min(imgStart.x,imgEnd.x), y1=Math.min(imgStart.y,imgEnd.y);
+        const x2=Math.max(imgStart.x,imgEnd.x), y2=Math.max(imgStart.y,imgEnd.y);
+        regions.push({id,type:'rectangle',color,data:{x1,y1,x2,y2},label:''});
+    } else if(activeTool==='ellipse'){
+        const cx=(imgStart.x+imgEnd.x)/2, cy=(imgStart.y+imgEnd.y)/2;
+        const rx=Math.abs(imgEnd.x-imgStart.x)/2, ry=Math.abs(imgEnd.y-imgStart.y)/2;
+        regions.push({id,type:'ellipse',color,data:{cx,cy,rx,ry},label:''});
+    } else if(activeTool==='polygon'&&currentPoints.length>2){
+        const pts=currentPoints.map(p=>[Math.round(p.x),Math.round(p.y)]);
+        regions.push({id,type:'polygon',color,data:{points:pts},label:''});
+        currentPoints=[];
+    }
+
+    startPoint=null; selectedRegionId=null;
+    updateRegionList(); updatePrompt(); redraw();
+    showToast(`✅ Region #${id} created`);
+});
+
+canvas.addEventListener('mouseleave',()=>{if(drawing){drawing=false;redraw()}});
+
+// ── Coordinate mapping ──
+function imgFromCanvas(cp){
+    if(!sourceImage)return cp;
+    return {x:cp.x*(sourceImage.width/canvas.width), y:cp.y*(sourceImage.height/canvas.height)};
+}
+function canvasFromImg(ip){
+    if(!sourceImage)return ip;
+    return {x:ip.x*(canvas.width/sourceImage.width), y:ip.y*(canvas.height/sourceImage.height)};
+}
+
+function pointInRegion(p, r){
+    if(r.type==='rectangle'){
+        const d=r.data;
+        return p.x>=d.x1&&p.x<=d.x2&&p.y>=d.y1&&p.y<=d.y2;
+    }
+    if(r.type==='ellipse'){
+        const d=r.data;
+        return ((p.x-d.cx)*(p.x-d.cx)/(d.rx*d.rx)+(p.y-d.cy)*(p.y-d.cy)/(d.ry*d.ry))<=1;
+    }
+    if(r.type==='polygon'){
+        const pts=r.data.points;let inside=false;
+        for(let i=0,j=pts.length-1;i<pts.length;j=i++){
+            const xi=pts[i][0],yi=pts[i][1],xj=pts[j][0],yj=pts[j][1];
+            if((yi>p.y)!==(yj>p.y)&&p.x<(xj-xi)*(p.y-yi)/(yj-yi)+xi)inside=!inside;
+        }
+        return inside;
+    }
+    return false;
+}
+
+// ── Region List ──
+function updateRegionList(){
+    const el=$('regionList');const count=$('regionCount');
+    count.textContent=regions.length?`(${regions.length})`:'';
+    if(!regions.length){el.innerHTML='';$('regionLabelRow').style.display='none';return}
+    el.innerHTML=regions.map(r=>{
+        const label=r.label||`Region #${r.id}`;
+        const typ={'rectangle':'Rect','ellipse':'Ellipse','polygon':'Poly'}[r.type]||r.type;
+        return `<div class="region-item${selectedRegionId===r.id?' selected':''}" data-id="${r.id}">
+            <input type="color" class="rc" value="${r.color}" data-id="${r.id}"/>
+            <span class="rl"><b>#${r.id}</b> ${typ} — ${label}</span>
+            <button class="btn-del" data-id="${r.id}">✕</button>
+        </div>`;
+    }).join('');
+
+    el.querySelectorAll('.rc').forEach(inp=>{inp.addEventListener('input',e=>{const r=regions.find(x=>x.id===parseInt(e.target.dataset.id));if(r){r.color=e.target.value;redraw()}})});
+    el.querySelectorAll('.btn-del').forEach(btn=>{btn.addEventListener('click',e=>{const id=parseInt(e.target.dataset.id);regions=regions.filter(x=>x.id!==id);if(selectedRegionId===id){selectedRegionId=null;$('regionLabelRow').style.display='none'}updateRegionList();updatePrompt();redraw();showToast(`🗑 Region #${id} deleted`)})});
+    el.querySelectorAll('.region-item').forEach(item=>{item.addEventListener('click',e=>{if(e.target.closest('.btn-del')||e.target.closest('.rc'))return;selectedRegionId=parseInt(item.dataset.id);updateRegionList();showRegionLabel(selectedRegionId);redraw()})});
+}
+
+function showRegionLabel(id){
+    const row=$('regionLabelRow');const inp=$('regionLabelInput');
+    if(!id){row.style.display='none';return}
+    const r=regions.find(x=>x.id===id);
+    if(!r){row.style.display='none';return}
+    row.style.display='flex';inp.value=r.label||'';
+    inp.focus();inp.select();
+}
+
+$('applyRegionLabel').addEventListener('click',()=>{
+    if(!selectedRegionId)return;
+    const r=regions.find(x=>x.id===selectedRegionId);
+    if(!r)return;
+    r.label=$('regionLabelInput').value.trim();
+    updateRegionList();updatePrompt();showToast('✅ Label saved');
+});
+$('regionLabelInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('applyRegionLabel').click()});
+
+$('clearRegions').addEventListener('click',()=>{if(regions.length){regions=[];selectedRegionId=null;$('regionLabelRow').style.display='none';updateRegionList();updatePrompt();redraw();showToast('🗑 Regions cleared')}});
+
+// ── Prompt (Gemini-friendly) ──
+const COLOR_NAMES = {'#FF6B6B':'red','#4ECDC4':'teal','#45B7D1':'blue','#96CEB4':'green','#FFEAA7':'yellow','#DDA0DD':'purple','#F7DC6F':'gold','#BB8FCE':'violet','#85C1E9':'sky blue','#F0B27A':'orange','#82E0AA':'mint','#E74C3C':'dark red'};
+
+function colorName(hex){
+    const h=hex.toLowerCase();
+    for(const[k,v]of Object.entries(COLOR_NAMES)){if(h===k.toLowerCase())return v}
+    return 'colored';
+}
+
+function updatePrompt(){
+    const el=$('promptOutput');
+    if(!regions.length){el.textContent='Chưa có region nào. Hãy vẽ region trước, sau đó ghi chú mô tả cho từng vùng.';return}
+    const imgW=sourceImage?.width||'?', imgH=sourceImage?.height||'?';
+    const style=($('imageStyle').value||'').trim();
+    const lines=[
+        `[Original image: ${imgW}×${imgH}px]`,
+        style ? `[Art style: ${style}]` : '',
+        '',
+        'IMPORTANT: Keep the exact original image dimensions (do NOT upscale or resize).',
+        style ? `Maintain the original art style (${style}) consistently.` : 'Maintain the original art style, texture, lighting and proportions consistently.',
+        'Edit ONLY the areas inside the colored outlines. Each outline has a description below.',
+        '',
+    ];
+    regions.forEach(r=>{
+        const desc=r.label&&r.label!==`Region #${r.id}`?r.label:'[mô tả của bạn]';
+        const cname=colorName(r.color);
+        const typ={'rectangle':'rect','ellipse':'ellipse','polygon':'freehand'}[r.type]||r.type;
+        lines.push(`• Region #${r.id} (${cname} ${typ} outline): ${desc}`);
+    });
+    lines.push(
+        '',
+        'Keep everything outside the outlines exactly as-is.',
+        'Do not change the overall image size or aspect ratio.',
+    );
+    el.textContent=lines.join('\n');
+}
+
+$('copyPrompt').addEventListener('click',()=>{
+    const text=$('promptOutput').textContent;
+    if(!text||text==='Chưa có region nào')return showToast('Không có dữ liệu để copy');
+    navigator.clipboard.writeText(text).then(()=>showToast('📋 Copied!')).catch(()=>showToast('❌ Copy failed'));
+});
+
+// ── Drawing on canvas ──
+let lastMousePos=null;
+
+function drawRegions(c,w,h){
+    if(!sourceImage)return;
+    const imgW=sourceImage.width, imgH=sourceImage.height;
+    const tx=(x)=>x*(w/imgW), ty=(y)=>y*(h/imgH);
+
+    // Existing regions
+    for(const r of regions){
+        const fc=r.color+'44', sc=r.color;
+        const sel=r.id===selectedRegionId;
+        const lw=sel?3:2;
+        c.font='bold 13px sans-serif';
+
+        if(r.type==='rectangle'){
+            const d=r.data; const x1=tx(d.x1),y1=ty(d.y1),x2=tx(d.x2),y2=ty(d.y2);
+            c.fillStyle=fc;c.fillRect(x1,y1,x2-x1,y2-y1);c.strokeStyle=sc;c.lineWidth=lw;c.strokeRect(x1,y1,x2-x1,y2-y1);
+            c.fillStyle=sc;c.fillText(`#${r.id}`,x1+4,y1+14);
+        } else if(r.type==='ellipse'){
+            const d=r.data; const cx=tx(d.cx),cy=ty(d.cy),rx=d.rx*(w/imgW),ry=d.ry*(h/imgH);
+            c.beginPath();c.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);c.fillStyle=fc;c.fill();c.strokeStyle=sc;c.lineWidth=lw;c.stroke();
+            c.fillStyle=sc;c.fillText(`#${r.id}`,cx-rx+4,cy-ry+14);
+        } else if(r.type==='polygon'){
+            const pts=r.data.points; if(pts.length<3)continue;
+            c.beginPath();c.moveTo(tx(pts[0][0]),ty(pts[0][1]));
+            for(let i=1;i<pts.length;i++)c.lineTo(tx(pts[i][0]),ty(pts[i][1])); c.closePath();
+            c.fillStyle=fc;c.fill();c.strokeStyle=sc;c.lineWidth=lw;c.stroke();
+            const mnX=Math.min(...pts.map(p=>tx(p[0]))),mnY=Math.min(...pts.map(p=>ty(p[1])));
+            c.fillStyle=sc;c.fillText(`#${r.id}`,mnX+4,mnY+14);
+        }
+    }
+
+    // Preview shape while drawing
+    if(drawing&&startPoint&&lastMousePos&&activeTool&&activeTool!=='select'){
+        const p=startPoint, m=lastMousePos;
+        c.strokeStyle='rgba(255,255,255,0.85)';c.lineWidth=2;c.setLineDash([6,4]);
+
+        if(activeTool==='rect'){
+            const x1=Math.min(p.x,m.x),y1=Math.min(p.y,m.y),x2=Math.max(p.x,m.x),y2=Math.max(p.y,m.y);
+            c.strokeRect(x1,y1,x2-x1,y2-y1);
+            c.setLineDash([]);
+            const rw=Math.round(Math.abs(m.x-p.x)*(imgW/w)),rh=Math.round(Math.abs(m.y-p.y)*(imgH/h));
+            c.fillStyle='rgba(0,0,0,0.65)';c.fillRect(x1+4,y1-20,x1+4+`${rw}×${rh}`.length*7+8,18);
+            c.fillStyle='#fff';c.font='11px sans-serif';c.fillText(`${rw}×${rh}`,x1+8,y1-7);
+        } else if(activeTool==='ellipse'){
+            const cx=(p.x+m.x)/2,cy=(p.y+m.y)/2,rx=Math.abs(m.x-p.x)/2,ry=Math.abs(m.y-p.y)/2;
+            c.beginPath();c.ellipse(cx,cy,rx,ry,0,0,Math.PI*2);c.stroke();
+            c.setLineDash([]);
+            const rw=Math.round(rx*2*imgW/w),rh=Math.round(ry*2*imgH/h);
+            c.fillStyle='rgba(0,0,0,0.65)';c.fillRect(cx-rx+4,cy-ry-16,cx-rx+4+`${rw}×${rh}`.length*7+8,18);
+            c.fillStyle='#fff';c.font='11px sans-serif';c.fillText(`${rw}×${rh}`,cx-rx+8,cy-ry-3);
+        } else if(activeTool==='polygon'){
+            const pts=currentPoints.map(p=>canvasFromImg(p));
+            if(pts.length>0){
+                c.beginPath();c.moveTo(pts[0].x,pts[0].y);
+                for(let i=1;i<pts.length;i++)c.lineTo(pts[i].x,pts[i].y);
+                c.lineTo(m.x,m.y);c.stroke();
+            }
+            c.setLineDash([]);
+        }
+    }
+}
+
+function redraw(){
+    if(!sourceImage)return;
+    const w=canvas.width,h=canvas.height;
+    ctx.clearRect(0,0,w,h);
+    ctx.drawImage(sourceImage,0,0,w,h);
+    drawRegions(ctx,w,h);
+}
+
+canvas.addEventListener('mousemove',e=>{
+    if(!sourceImage)return;
+    lastMousePos=getCanvasPos(canvas,e);
+    if(drawing&&activeTool==='polygon'){
+        const imgP=imgFromCanvas(lastMousePos);
+        const last=currentPoints.length?currentPoints[currentPoints.length-1]:null;
+        if(!last||Math.hypot(imgP.x-last.x,imgP.y-last.y)>3)currentPoints.push(imgP);
+    }
+    redraw();
+});
+
+// ── Helper: fetch overlay blob from server ──
+async function fetchOverlayBlob(){
+    const r=await fetch(sourceImage.src);const blob=await r.blob();
+    const f=new FormData();f.append('image',blob,'image.png');
+    f.append('grid_type','cross');f.append('color','#ff4444');f.append('line_width','0');
+    f.append('rows','1');f.append('cols','1');f.append('guides','[]');
+    f.append('regions',JSON.stringify(regions));
+    const res=await fetch('/draw-grid',{method:'POST',body:f});
+    if(!res.ok)throw Error('Server error');
+    return res.blob();
+}
+
+// ── Copy overlay to clipboard ──
+$('regionCopyBtn').addEventListener('click',async()=>{
+    if(!sourceImage)return showToast('Vui lòng chọn ảnh trước');
+    if(!regions.length)return showToast('Chưa có region nào');
+    const btn=$('regionCopyBtn');btn.classList.add('loading');btn.disabled=true;
+    try{
+        const blob=await fetchOverlayBlob();
+        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        showToast('✅ Đã copy ảnh! Vào Gemini chat Ctrl+V');
+    }catch(e){
+        showToast('❌ Copy thất bại: '+e.message);
+    }finally{btn.classList.remove('loading');btn.disabled=false}
+});
+
+// ── Download overlay image ──
+$('regionDownloadBtn').addEventListener('click',async()=>{
+    if(!sourceImage)return showToast('Vui lòng chọn ảnh trước');
+    if(!regions.length)return showToast('Chưa có region nào');
+    const btn=$('regionDownloadBtn');btn.classList.add('loading');btn.disabled=true;
+    try{
+        const blob=await fetchOverlayBlob();
+        const u=URL.createObjectURL(blob);const a=document.createElement('a');
+        a.href=u;a.download='overlay-regions.png';a.click();URL.revokeObjectURL(u);
+        showToast('✅ Downloaded! Upload ảnh + prompt lên Gemini');
+    }catch(e){showToast('❌ '+e.message)}
+    finally{btn.classList.remove('loading');btn.disabled=false}
+});
+
+// ── Init ──
+$('imageStyle').addEventListener('input', updatePrompt);
+updateRegionList();
+updatePrompt();
+console.log('✏️ Region tab ready');
+})();
+
+</script>
+</body>
+</html>
