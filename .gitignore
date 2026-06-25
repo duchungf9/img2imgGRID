@@ -1,0 +1,4 @@
+static/test_masks/
+models/
+check_temp.js
+**/__pycache__/

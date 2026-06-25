@@ -177,6 +177,58 @@ def draw_grid_on_image(img, params):
     return img
 
 
+@app.route('/see-through', methods=['POST'])
+def see_through():
+    if 'image' not in request.files:
+        return {'error': 'No image uploaded'}, 400
+    file = request.files['image']
+    img = Image.open(file.stream).convert('RGB')
+
+    try:
+        from see_through_module import get_layers_json
+        layers = get_layers_json(img)
+        return {'layers': layers, 'count': len(layers)}
+    except ImportError as e:
+        return {'error': f'Module error: {str(e)}'}, 500
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
+@app.route('/sam/segment', methods=['POST'])
+def sam_segment():
+    if 'image' not in request.files:
+        return {'error': 'No image'}, 400
+    img = Image.open(request.files['image'].stream).convert('RGB')
+    x = int(request.form.get('x', 0))
+    y = int(request.form.get('y', 0))
+    try:
+        from sam_tools import sam_segment_image
+        results = sam_segment_image(img, [[x, y, 1]])
+        if results is None:
+            return {'error': 'SAM model not loaded - check disk space for ViT-B checkpoint (~350MB) download'}, 500
+        return {'masks': results, 'count': len(results)}
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
+@app.route('/sam/inpaint', methods=['POST'])
+def sam_inpaint():
+    if 'image' not in request.files or 'mask' not in request.files:
+        return {'error': 'Need image + mask'}, 400
+    img = Image.open(request.files['image'].stream).convert('RGB')
+    mask = Image.open(request.files['mask'].stream).convert('L')
+    try:
+        from sam_tools import inpaint_image
+        result = inpaint_image(img, mask)
+        if result is None:
+            return {'error': 'LaMa model not loaded'}, 500
+        buf = io.BytesIO()
+        result.save(buf, format='PNG')
+        return send_file(io.BytesIO(buf.getvalue()), mimetype='image/png')
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
 @app.route('/')
 def index():
     return render_template('index.html')

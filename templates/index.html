@@ -125,6 +125,7 @@ header span{color:#7c7c9a;font-size:12px}
 <div class="tab-bar">
     <button class="tab active" data-tab="grid">📐 GridDrawPro</button>
     <button class="tab" data-tab="region">✏️ Region Select</button>
+    <button class="tab" data-tab="seethrough">👁 See-Through</button>
 </div>
 
 <div class="tab-panes">
@@ -281,6 +282,50 @@ header span{color:#7c7c9a;font-size:12px}
                 <span class="spinner"></span><span class="label-text">⬇️ Download</span>
             </button>
         </div>
+    </div>
+</div>
+
+<!-- ════════════════════ TAB: SEE-THROUGH ════════════════ -->
+<div class="tab-pane" id="pane-seethrough">
+    <div class="canvas-area" id="stCanvasArea">
+        <div class="drop-zone" id="stDrop">
+            <div class="drop-placeholder">
+                <div class="icon">👁️</div>
+                <p>Kéo thả ảnh hoặc click để chọn</p>
+                <div class="sub">Tách layers từ ảnh anime / nhân vật</div>
+            </div>
+            <canvas id="stCanvas"></canvas>
+            <div class="file-label" id="stFileLabel" style="display:none;"></div>
+            <input type="file" id="stFileInput" accept="image/*" style="display:none"/>
+        </div>
+    </div>
+
+    <div class="panel" style="max-height:calc(100vh - 90px)">
+        <div class="section no-border">
+            <h2>👁 See-Through</h2>
+            <div id="stModeRow" class="row2" style="gap:4px;margin-bottom:6px;">
+                <button class="btn-sm" id="stModeSeg" style="flex:1;text-align:center;">🧠 Body Parts</button>
+                <button class="btn-sm active" id="stModeClick" style="flex:1;text-align:center;">👆 Click-SAM</button>
+            </div>
+            <div style="font-size:10px;color:#666;margin-bottom:6px;" id="stModeHint">👆 Click vào ảnh → SAM cắt object tại điểm đó</div>
+            <div class="row2" style="gap:6px">
+                <button class="btn-primary" id="stProcessBtn" style="flex:1;font-size:12px;padding:8px">
+                    <span class="spinner"></span><span class="label-text">🔍 Body Parts</span>
+                </button>
+                <button class="btn-primary" id="stInpaintBtn" disabled style="flex:1;font-size:12px;padding:8px;background:#2a6a2a">
+                    <span class="spinner"></span><span class="label-text">🖌 Inpaint</span>
+                </button>
+            </div>
+        </div>
+
+        <div class="section" id="stResultSection" style="display:none;">
+            <h2>📦 Layers <span id="stLayerCount" style="font-weight:400;font-size:11px;color:#888"></span>
+                <button class="btn-sm" id="stResetView" style="float:right;">🔄 Ảnh gốc</button>
+            </h2>
+            <div id="stLayerList" style="display:flex;flex-direction:column;gap:6px;"></div>
+        </div>
+
+        <div id="stStatus" style="font-size:11px;color:#666;text-align:center;margin-top:4px;"></div>
     </div>
 </div>
 
@@ -852,6 +897,201 @@ $('imageStyle').addEventListener('input', updatePrompt);
 updateRegionList();
 updatePrompt();
 console.log('✏️ Region tab ready');
+})();
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB 3 — SEE-THROUGH (Body Parts + SAM Click + Inpaint)
+// ═══════════════════════════════════════════════════════════════
+(function(){
+const canvas=$('stCanvas'),ctx=canvas.getContext('2d');
+const drop=$('stDrop'),fileInput=$('stFileInput'),fileLabel=$('stFileLabel'),canvasArea=$('stCanvasArea');
+const processBtn=$('stProcessBtn'),inpaintBtn=$('stInpaintBtn');
+const resultSection=$('stResultSection'),layerList=$('stLayerList'),layerCount=$('stLayerCount'),stStatus=$('stStatus');
+const stModeSeg=$('stModeSeg'),stModeClick=$('stModeClick'),stModeHint=$('stModeHint');
+let sourceImage=null, layerResults=[], clickMode=false;
+
+drop.addEventListener('click',()=>fileInput.click());
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('dragover')});
+drop.addEventListener('dragleave',()=>drop.classList.remove('dragover'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('dragover');if(e.dataTransfer.files.length)loadFile(e.dataTransfer.files[0])});
+fileInput.addEventListener('change',()=>{if(fileInput.files.length)loadFile(fileInput.files[0])});
+
+function loadFile(file){
+    if(!file.type.startsWith('image/'))return showToast('Vui lòng chọn file ảnh');
+    const r=new FileReader();
+    r.onload=e=>{const img=new Image();img.onload=()=>{
+        sourceImage=img;layerResults=[];
+        fileLabel.textContent=`${file.name} (${img.width}×${img.height})`;
+        fileLabel.style.display='block';canvasArea.classList.add('has-image');
+        resultSection.style.display='none';
+        inpaintBtn.disabled=true;
+        stStatus.textContent='';
+        resizeCanvas();redraw();showToast(`✅ ${file.name}`);
+    };img.src=e.target.result};
+    r.readAsDataURL(file);
+}
+
+function resizeCanvas(){
+    if(!sourceImage)return;
+    const rect=drop.getBoundingClientRect();
+    const s=Math.min((rect.width-16)/sourceImage.width,(rect.height-16)/sourceImage.height,1);
+    canvas.width=sourceImage.width*s;canvas.height=sourceImage.height*s;
+    canvas.style.width=canvas.width+'px';canvas.style.height=canvas.height+'px';
+}
+
+function redraw(){
+    if(!sourceImage)return;
+    const w=canvas.width,h=canvas.height;
+    ctx.clearRect(0,0,w,h);
+    ctx.drawImage(sourceImage,0,0,w,h);
+}
+
+// ── Mode switching ──
+stModeSeg.addEventListener('click',()=>{
+    clickMode=false;
+    stModeSeg.classList.add('active');stModeClick.classList.remove('active');
+    stModeHint.textContent='🔍 Bấm "Body Parts" để tách tự động 19 class body parts';
+});
+stModeClick.addEventListener('click',()=>{
+    clickMode=true;
+    stModeClick.classList.add('active');stModeSeg.classList.remove('active');
+    stModeHint.textContent='👆 Click vào object bất kỳ trên ảnh → SAM cắt ra mask';
+});
+
+// ── Canvas click → SAM ──
+canvas.addEventListener('click',async(e)=>{
+    if(!clickMode||!sourceImage)return;
+    e.stopPropagation();
+    const rect=canvas.getBoundingClientRect();
+    const x=(e.clientX-rect.left)*(sourceImage.width/canvas.width);
+    const y=(e.clientY-rect.top)*(sourceImage.height/canvas.height);
+    stStatus.textContent='⏳ SAM segmenting...';
+
+    const resp=await fetch(sourceImage.src);const blob=await resp.blob();
+    const f=new FormData();f.append('image',blob,'image.png');
+    f.append('x',Math.round(x));f.append('y',Math.round(y));
+    try{
+        const res=await fetch('/sam/segment',{method:'POST',body:f});
+        const data=await res.json();
+        if(data.error)throw Error(data.error);
+        if(!data.masks||!data.masks.length)throw Error('No mask found');
+        // Add each SAM mask as a new layer
+        data.masks.forEach(m=>{
+            layerResults.push({name:'sam_click',image_base64:m.image_base64,mask_base64:m.mask_base64});
+        });
+        renderLayers();
+        showToast(`✅ SAM: ${data.count} mask(s)`);
+    }catch(e){
+        stStatus.textContent='❌ '+e.message;
+        showToast('❌ '+e.message);
+    }
+});
+
+// ── Body Parts process ──
+processBtn.addEventListener('click',async()=>{
+    if(!sourceImage)return showToast('Vui lòng chọn ảnh trước');
+    processBtn.classList.add('loading');processBtn.disabled=true;
+    stStatus.textContent='⏳ Đang phân tích layers...';
+    const resp=await fetch(sourceImage.src);const blob=await resp.blob();
+    const f=new FormData();f.append('image',blob,'image.png');
+    try{
+        const res=await fetch('/see-through',{method:'POST',body:f});
+        const data=await res.json();
+        if(data.error)throw Error(data.error);
+        layerResults=data.layers||[];
+        renderLayers();
+        showToast(`✅ Tách được ${data.count} layers`);
+    }catch(e){stStatus.textContent='❌ '+e.message;showToast('❌ '+e.message)}
+    finally{processBtn.classList.remove('loading');processBtn.disabled=false}
+});
+
+// ── Inpaint ──
+inpaintBtn.addEventListener('click',async()=>{
+    if(!sourceImage||!layerResults.length)return showToast('Chưa có layer nào');
+    inpaintBtn.classList.add('loading');inpaintBtn.disabled=true;
+    stStatus.textContent='⏳ Inpainting...';
+    try{
+        // Pick first non-background layer
+        const target=layerResults.find(l=>l.name!=='background'&&l.name!=='foreground')||layerResults[0];
+        if(!target)throw Error('No layer to inpaint');
+        // Get original image
+        const resp=await fetch(sourceImage.src);const blob=await resp.blob();
+        // Convert base64 mask to blob
+        const maskResp=await fetch('data:image/png;base64,'+target.mask_base64);
+        const maskBlob=await maskResp.blob();
+        const f=new FormData();f.append('image',blob,'image.png');
+        f.append('mask',maskBlob,'mask.png');
+        const res=await fetch('/sam/inpaint',{method:'POST',body:f});
+        if(!res.ok)throw Error('Inpaint failed');
+        const resultBlob=await res.blob();
+        const u=URL.createObjectURL(resultBlob);
+        const a=document.createElement('a');a.href=u;a.download='inpainted.png';a.click();
+        URL.revokeObjectURL(u);
+        showToast('✅ Inpainted! Tải về thành công');
+    }catch(e){stStatus.textContent='❌ '+e.message;showToast('❌ '+e.message)}
+    finally{inpaintBtn.classList.remove('loading');inpaintBtn.disabled=false}
+});
+
+// ── Layer List ──
+function renderLayers(){
+    if(!layerResults.length){resultSection.style.display='none';inpaintBtn.disabled=true;return}
+    resultSection.style.display='block';
+    inpaintBtn.disabled=false;
+    layerCount.textContent=`(${layerResults.length})`;
+    stStatus.textContent='';
+    const names={
+        'foreground':'🎯 Foreground','background':'🌌 Background','outlines':'✏️ Outlines',
+        'hair':'💇 Hair','headwear':'🎩 Headwear','face':'😊 Face','eyes':'👁 Eyes','eyewear':'👓 Eyewear',
+        'ears':'👂 Ears','earwear':'📿 Earwear','nose':'👃 Nose','mouth':'👄 Mouth','neck':'🦴 Neck',
+        'neckwear':'🧣 Neckwear','topwear':'👕 Topwear','handwear':'🧤 Handwear','bottomwear':'👖 Bottomwear',
+        'legwear':'🧦 Legwear','footwear':'👟 Footwear','tail':'🦊 Tail','wings':'🕊 Wings','objects':'📦 Objects',
+        'sam_click':'👆 SAM Click',
+    };
+    layerList.innerHTML=layerResults.map((l,i)=>{
+        const label=names[l.name]||`🎨 Layer ${i+1}`;
+        const isSam=l.name==='sam_click';
+        return `<div style="background:#0f0f13;border-radius:8px;border:1px solid #1e1e2e;overflow:hidden;">
+            <div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;">
+                <span style="font-size:12px;font-weight:500;color:#ccc;">${label}</span>
+                <div style="display:flex;gap:4px;">
+                    <button class="btn-sm st-preview" data-idx="${i}">👁 Xem</button>
+                    <button class="btn-sm st-download" data-idx="${i}">⬇</button>
+                    ${isSam?`<button class="btn-sm st-del" data-idx="${i}" style="color:#f66;">✕</button>`:''}
+                </div>
+            </div>
+            <div style="padding:0 10px 8px;">
+                <img src="data:image/png;base64,${l.image_base64}" style="width:100%;border-radius:4px;image-rendering:pixelated;background:repeating-conic-gradient(#ccc 0% 25%,#fff 0% 50%) 0 0/16px 16px;" />
+            </div>
+        </div>`;
+    }).join('');
+
+    layerList.querySelectorAll('.st-preview').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+            const idx=parseInt(btn.dataset.idx);const l=layerResults[idx];if(!l)return;
+            const img=new Image();
+            img.onload=()=>{ctx.clearRect(0,0,canvas.width,canvas.height);ctx.drawImage(img,0,0,canvas.width,canvas.height);
+                ctx.strokeStyle='rgba(255,255,255,0.5)';ctx.lineWidth=1;ctx.strokeRect(0,0,canvas.width-1,canvas.height-1);};
+            img.src='data:image/png;base64,'+l.image_base64;
+        });
+    });
+    layerList.querySelectorAll('.st-download').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+            const idx=parseInt(btn.dataset.idx);const l=layerResults[idx];if(!l)return;
+            const a=document.createElement('a');a.href='data:image/png;base64,'+l.image_base64;a.download=l.name+'.png';a.click();
+        });
+    });
+    layerList.querySelectorAll('.st-del').forEach(btn=>{
+        btn.addEventListener('click',()=>{
+            const idx=parseInt(btn.dataset.idx);
+            layerResults.splice(idx,1);
+            renderLayers();
+        });
+    });
+}
+
+$('stResetView').addEventListener('click',redraw);
+window.addEventListener('resize',()=>{resizeCanvas();redraw()});
+console.log('👁 See-Through tab ready');
 })();
 
 </script>
