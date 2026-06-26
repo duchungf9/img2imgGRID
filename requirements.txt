@@ -1,0 +1,8 @@
+Flask>=3.0
+Pillow>=10.0
+opencv-python>=4.9
+numpy>=1.24
+requests>=2.31
+scikit-image>=0.22
+huggingface_hub>=0.24
+einops>=0.8
