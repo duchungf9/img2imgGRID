@@ -28,22 +28,41 @@ call venv\Scripts\activate.bat
 
 :: ─── Upgrade pip ───
 echo [*] Nang cap pip...
-python -m pip install --upgrade pip -q
+venv\Scripts\python.exe -m pip install --upgrade pip -q
 
-:: ─── Install PyTorch CUDA ───
+:: ─── Install PyTorch ───
 echo [*] Kiem tra PyTorch...
-python -c "import torch; assert torch.cuda.is_available()" 2>nul
+venv\Scripts\python.exe -c "import torch" 2>nul
 if %ERRORLEVEL% neq 0 (
-    echo [*] Cai dat PyTorch + CUDA (2.6.0+cu124) ~4GB...
-    pip install torch==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124 --no-deps
-    pip install torchvision==0.21.0+cu124 --index-url https://download.pytorch.org/whl/cu124 --no-deps
+    echo [!] PyTorch chua co. Dang cai dat...
+
+    :: Thu cai PyTorch + CUDA truoc
+    echo [*] Thu cai PyTorch + CUDA (2.6.0+cu124)...
+    venv\Scripts\pip.exe install torch==2.6.0+cu124 --index-url https://download.pytorch.org/whl/cu124 --no-deps
+    venv\Scripts\pip.exe install torchvision==0.21.0+cu124 --index-url https://download.pytorch.org/whl/cu124 --no-deps
+
+    :: Kiem tra xem CUDA co hoat dong khong
+    venv\Scripts\python.exe -c "import torch; assert torch.cuda.is_available()" 2>nul
+    if %ERRORLEVEL% neq 0 (
+        echo [!] CUDA khong kha dung. Cai dat PyTorch CPU...
+        venv\Scripts\pip.exe install torch torchvision --index-url https://download.pytorch.org/whl/cpu --no-deps
+        echo [OK] PyTorch CPU da cai xong
+    ) else (
+        echo [OK] PyTorch + CUDA da cai xong
+    )
 ) else (
-    echo [OK] PyTorch CUDA da co
+    :: PyTorch da co, kiem tra CUDA
+    venv\Scripts\python.exe -c "import torch; assert torch.cuda.is_available()" 2>nul
+    if %ERRORLEVEL% neq 0 (
+        echo [OK] PyTorch co (CPU mode)
+    ) else (
+        echo [OK] PyTorch + CUDA da co
+    )
 )
 
 :: ─── Install other dependencies ───
 echo [*] Cai dat thu vien...
-pip install -r requirements.txt --quiet
+venv\Scripts\pip.exe install -r requirements.txt --quiet
 
 :: ─── Kiểm tra model see-through ───
 if not exist "models\see_through\checkpoint-18000.pt" (
@@ -59,7 +78,7 @@ if not exist "models\see_through\checkpoint-18000.pt" (
     ) else (
         echo [*] Dang tai model (1.2GB)...
         mkdir models\see_through 2>nul
-        python -c "from huggingface_hub import hf_hub_download; hf_hub_download('24yearsold/l2d_sam_iter2', 'checkpoint-18000.pt', local_dir='models/see_through', local_dir_use_symlinks=False)"
+        venv\Scripts\python.exe -c "from huggingface_hub import hf_hub_download; hf_hub_download('24yearsold/l2d_sam_iter2', 'checkpoint-18000.pt', local_dir='models/see_through', local_dir_use_symlinks=False)"
         echo [OK] Model da tai xong!
     )
     echo.
@@ -74,6 +93,6 @@ echo =============================================
 echo.
 
 start http://localhost:5000
-python app.py
+venv\Scripts\python.exe app.py
 
 pause

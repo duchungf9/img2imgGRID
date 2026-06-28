@@ -98,6 +98,11 @@ header span{color:#7c7c9a;font-size:12px}
 .region-item .rl{flex:1;font-size:10px;color:#aaa;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .region-item .rl b{color:#ddd}
 .region-item.selected{border-color:#4ecdc4;background:#4ecdc408}
+.region-mode{padding:2px 4px;border-radius:4px;border:1px solid #2a2a3a;background:#0f0f13;color:#e0e0e0;font-size:10px;max-width:90px;cursor:pointer}
+.region-mode:focus{border-color:#6c6cff}
+#regionStyleRefArea:hover{border-color:#6c6cff;background:#1c1c28}
+.preset-btn{font-size:10px;padding:4px 8px}
+.preset-btn:hover{background:#6c6cff22;border-color:#6c6cff;color:#fff}
 
 .region-label-input{display:flex;gap:6px}
 .region-label-input input{flex:1;padding:5px 8px;border-radius:6px;border:1px solid #2a2a3a;background:#0f0f13;color:#e0e0e0;font-size:11px;outline:none}
@@ -125,6 +130,7 @@ header span{color:#7c7c9a;font-size:12px}
 <div class="tab-bar">
     <button class="tab active" data-tab="grid">📐 GridDrawPro</button>
     <button class="tab" data-tab="region">✏️ Region Select</button>
+    <button class="tab" data-tab="extract">✂️ Object Edit</button>
     <button class="tab" data-tab="seethrough">👁 See-Through</button>
 </div>
 
@@ -219,8 +225,8 @@ header span{color:#7c7c9a;font-size:12px}
         <div class="drop-zone" id="regionDrop">
             <div class="drop-placeholder">
                 <div class="icon">🖼️</div>
-                <p>Kéo thả ảnh hoặc click để chọn</p>
-                <div class="sub">PNG, JPG, WebP</div>
+                <p>Kéo thả ảnh vào đây</p>
+                <div class="sub">hoặc nhấn nút "📁 Chọn ảnh" ở panel bên phải</div>
             </div>
             <canvas id="regionCanvas"></canvas>
             <div class="file-label" id="regionFileLabel" style="display:none;"></div>
@@ -229,8 +235,82 @@ header span{color:#7c7c9a;font-size:12px}
     </div>
 
     <div class="panel" style="max-height:calc(100vh - 90px)">
-        <!-- Selection tools -->
+        <!-- File select button -->
         <div class="section no-border">
+            <button class="btn-primary" id="regionFileBtn" style="font-size:12px;padding:8px">
+                <span class="label-text">📁 Chọn ảnh</span>
+            </button>
+            <div style="font-size:10px;color:#666;margin-top:4px">Kéo thả ảnh vào canvas hoặc nhấn nút này</div>
+        </div>
+
+        <!-- Style Reference Image -->
+        <div class="section">
+            <h2>🎨 Style Reference <span style="font-size:10px;color:#666;font-weight:normal">(tùy chọn)</span></h2>
+            <div id="styleRefArea" style="position:relative;border:1px dashed #2a2a3a;border-radius:8px;padding:8px;text-align:center;cursor:pointer;transition:all .2s;">
+                <div id="styleRefPlaceholder">
+                    <div style="font-size:24px;opacity:.4">🖌️</div>
+                    <div style="font-size:11px;color:#7c7c9a;margin-top:4px">Click để chọn ảnh style reference</div>
+                    <div style="font-size:10px;color:#555">Chỉ cần nếu muốn đổi style khác</div>
+                </div>
+                <img id="styleRefPreview" style="display:none;max-width:100%;max-height:120px;border-radius:4px;" />
+                <input type="file" id="styleRefInput" accept="image/*" style="display:none"/>
+            </div>
+            <button class="btn-clear" id="clearStyleRef" style="display:none;margin-top:4px;">🗑 Xoá style ref</button>
+            <div style="font-size:10px;color:#888;margin-top:6px;padding:6px;background:#0f0f13;border-radius:6px;border:1px solid #1e1e2e;">
+                💡 <strong>Ảnh gốc sẽ được AI quan sát để giữ style.</strong><br>
+                Chỉ upload style ref nếu muốn đổi sang style khác.
+            </div>
+        </div>
+
+        <!-- Prompt Mode -->
+        <div class="section">
+            <h2>⚙️ Prompt Mode</h2>
+            <div class="form-group">
+                <select id="promptMode">
+                    <option value="style-transfer">🎨 Style Transfer — Giữ nguyên style, thay đổi nội dung</option>
+                    <option value="game-reskin">🎮 Game Reskin — Đổi style nhân vật/assets</option>
+                    <option value="character-edit">👤 Character Edit — Thay đổi chi tiết nhân vật</option>
+                    <option value="preserve">🔒 Preserve — Chỉ giữ nguyên, không thay đổi</option>
+                </select>
+            </div>
+            <div style="font-size:10px;color:#666;margin-top:4px" id="promptModeHint">Giữ nguyên phong cách nghệ thuật, chỉ thay đổi nội dung trong vùng chọn</div>
+        </div>
+
+        <!-- Art Style Type -->
+        <div class="section">
+            <h2>🖌️ Art Style Type</h2>
+            <div class="form-group">
+                <select id="artStyleType">
+                    <option value="auto">🔍 Auto — AI tự nhận diện từ ảnh gốc</option>
+                    <option value="hand-drawn">✏️ Hand-drawn — Vẽ tay, nét thô, tự nhiên</option>
+                    <option value="sketch">📝 Sketch — Phác thảo, chưa hoàn thiện</option>
+                    <option value="flat-color">🎨 Flat Color — Màu phẳng, không gradient</option>
+                    <option value="cel-shaded">🎭 Cel-shaded — Tô màu theo vùng, anime</option>
+                    <option value="concept-art">🖼️ Concept Art — Phác thảo ý tưởng</option>
+                    <option value="pixel-art">👾 Pixel Art — Đồ họa pixel</option>
+                    <option value="watercolor">💧 Watercolor — Màu nước, loang lổ</option>
+                    <option value="oil-painting">🖌️ Oil Painting — Sơn dầu, brush strokes</option>
+                </select>
+            </div>
+            <div style="font-size:10px;color:#666;margin-top:4px" id="artStyleHint">Chọn style để prompt chính xác hơn (hoặc để AI tự nhận diện)</div>
+        </div>
+
+        <!-- Preset Templates -->
+        <div class="section">
+            <h2>📋 Presets</h2>
+            <div style="display:flex;flex-wrap:wrap;gap:4px;">
+                <button class="btn-sm preset-btn" data-preset="face">😊 Face</button>
+                <button class="btn-sm preset-btn" data-preset="hair">💇 Hair</button>
+                <button class="btn-sm preset-btn" data-preset="body">👤 Body</button>
+                <button class="btn-sm preset-btn" data-preset="bg">🌌 Background</button>
+                <button class="btn-sm preset-btn" data-preset="clothes">👕 Clothes</button>
+                <button class="btn-sm preset-btn" data-preset="eyes">👁 Eyes</button>
+            </div>
+            <div style="font-size:10px;color:#666;margin-top:4px">Click preset để thêm label tự động</div>
+        </div>
+
+        <!-- Selection tools -->
+        <div class="section">
             <h2>✏️ Selection Tools</h2>
             <div class="region-tools">
                 <button class="region-btn" data-tool="rect">▭ Rect</button>
@@ -240,6 +320,9 @@ header span{color:#7c7c9a;font-size:12px}
             </div>
             <div style="font-size:10px;color:#666;margin-top:4px">
                 <span id="regionToolHint">Chọn tool, click-drag lên canvas để tạo region</span>
+            </div>
+            <div style="font-size:10px;color:#888;margin-top:4px;padding:6px;background:#0f0f13;border-radius:6px;border:1px solid #1e1e2e;">
+                💡 <strong>Mẹo:</strong> Khoanh vùng càng nhỏ → AI giữ style càng tốt. Vẽ vừa đủ, không quá lớn.
             </div>
         </div>
 
@@ -274,14 +357,220 @@ header span{color:#7c7c9a;font-size:12px}
             </div>
         </div>
 
-        <div class="row2" style="gap:6px">
-            <button class="btn-primary" id="regionCopyBtn" style="flex:1;font-size:12px">
-                <span class="spinner"></span><span class="label-text">📋 Copy ảnh</span>
-            </button>
-            <button class="btn-primary" id="regionDownloadBtn" style="flex:1;font-size:12px">
-                <span class="spinner"></span><span class="label-text">⬇️ Download</span>
+        <!-- Copy buttons for each image -->
+        <div class="section">
+            <h2>📋 Copy từng ảnh</h2>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+                <button class="btn-primary" id="copyOrigBtn" style="font-size:11px;padding:8px;text-align:left;">
+                    <span class="spinner"></span>
+                    <span class="label-text">📋 ① Copy ảnh GỐC (AI quan sát style)</span>
+                </button>
+                <button class="btn-primary" id="copyOverlayBtn" style="font-size:11px;padding:8px;text-align:left;background:#2a6a4a;">
+                    <span class="spinner"></span>
+                    <span class="label-text">📋 ② Copy ảnh REGION (AI biết edit đâu)</span>
+                </button>
+                <button class="btn-primary" id="copyStyleRefBtn" style="font-size:11px;padding:8px;text-align:left;background:#6a4a2a;display:none;">
+                    <span class="spinner"></span>
+                    <span class="label-text">📋 ③ Copy STYLE REF (nếu có)</span>
+                </button>
+            </div>
+            <div style="font-size:10px;color:#666;margin-top:6px;text-align:center;">
+                Copy từng ảnh → Paste vào Gemini theo thứ tự ①②③
+            </div>
+            <div style="font-size:10px;color:#ffcc00;text-align:center;margin-top:4px;padding:6px;background:#2a2a1a;border-radius:6px;border:1px solid #4a4a2a;">
+                ⚠️ <strong>Nhớ:</strong> Bạn đang "patching pixels", không phải "tạo nghệ thuật". Giữ mask nhỏ, chọn đúng style type.
+            </div>
+        </div>
+
+        <!-- Download all -->
+        <div class="section">
+            <button class="btn-primary" id="regionDownloadBtn" style="font-size:12px;padding:8px">
+                <span class="spinner"></span>
+                <span class="label-text">⬇️ Download tất cả ảnh</span>
             </button>
         </div>
+
+        <!-- Export Options -->
+        <div class="section">
+            <h2>📦 Export Options</h2>
+            <div style="display:flex;flex-direction:column;gap:4px;">
+                <button class="btn-sm" id="exportMaskBtn" style="text-align:left;">🎭 Export Mask (selected region)</button>
+                <button class="btn-sm" id="exportAllMasksBtn" style="text-align:left;">🎭 Export All Masks</button>
+                <button class="btn-sm" id="exportSpriteBtn" style="text-align:left;">🖼️ Export Sprite Sheet</button>
+            </div>
+            <div style="font-size:10px;color:#666;margin-top:4px">Export mask để dùng trong Photoshop, ComfyUI, etc.</div>
+        </div>
+    </div>
+</div>
+
+<!-- ════════════════════ TAB: OBJECT EXTRACT ════════════════ -->
+<div class="tab-pane" id="pane-extract">
+    <div class="canvas-area" id="extractCanvasArea">
+        <div class="drop-zone" id="extractDrop">
+            <div class="drop-placeholder">
+                <div class="icon">✂️</div>
+                <p>Kéo thả ảnh hoặc click để chọn</p>
+                <div class="sub">Edit 1 object cụ thể trong ảnh</div>
+            </div>
+            <canvas id="extractCanvas"></canvas>
+            <div class="file-label" id="extractFileLabel" style="display:none;"></div>
+            <input type="file" id="extractFileInput" accept="image/*" style="display:none"/>
+        </div>
+    </div>
+
+    <div class="panel" style="max-height:calc(100vh - 90px)">
+        <!-- File select -->
+        <div class="section no-border">
+            <button class="btn-primary" id="extractFileBtn" style="font-size:12px;padding:8px">
+                <span class="label-text">📁 Chọn ảnh</span>
+            </button>
+        </div>
+
+        <!-- Object Type -->
+        <div class="section">
+            <h2>🎯 Object cần edit</h2>
+            <div class="form-group">
+                <select id="extractObjectType">
+                    <option value="cloak">🧥 Cloak / Áo choàng</option>
+                    <option value="hair">💇 Hair / Tóc</option>
+                    <option value="wings">🕊️ Wings / Cánh</option>
+                    <option value="skirt">👗 Skirt / Váy</option>
+                    <option value="cape">🦸 Cape / Áo choàng siêu anh hùng</option>
+                    <option value="scarf">🧣 Scarf / Khăn choàng</option>
+                    <option value="tail">🦊 Tail / Đuôi</option>
+                    <option value="armor">🛡️ Armor / Giáp</option>
+                    <option value="weapon">⚔️ Weapon / Vũ khí</option>
+                    <option value="eyes">👁 Eyes / Mắt</option>
+                    <option value="face">😊 Face / Mặt</option>
+                    <option value="custom">✏️ Custom (nhập bên dưới)</option>
+                </select>
+            </div>
+            <div class="form-group" id="customObjectGroup" style="display:none;margin-top:6px;">
+                <input type="text" id="customObjectInput" placeholder="Nhập tên object, VD: ribbon, belt, holster..." />
+            </div>
+        </div>
+
+        <!-- Edit instruction -->
+        <div class="section">
+            <h2>📝 Mô tả phần cần vẽ</h2>
+            <div class="form-group">
+                <textarea id="extractEditDesc" rows="3" placeholder="Mô tả phần bị ẩn, VD: phần áo choàng phía sau lưng, phần tóc bên trái, phần cánh bị che..." style="padding:6px 10px;border-radius:8px;border:1px solid #2a2a3a;background:#0f0f13;color:#e0e0e0;font-size:12px;outline:none;resize:vertical;width:100%;box-sizing:border-box;"></textarea>
+            </div>
+            <div style="font-size:10px;color:#888;margin-top:4px;">
+                Mô tả chính xác phần bị ẩn để AI hiểu cần vẽ gì
+            </div>
+        </div>
+
+        <!-- Step 1: Segment with SAM -->
+        <div class="section">
+            <h2>① Tách object bằng SAM</h2>
+            <div style="font-size:10px;color:#888;margin-bottom:6px;">
+                Click vào object cần tách (cloak, hair, wings...) để SAM segment chính xác
+            </div>
+            <button class="btn-primary" id="extractSAMBtn" style="font-size:11px;padding:8px;margin-bottom:4px;">
+                <span class="spinner"></span>
+                <span class="label-text">👆 Click vào object trên canvas</span>
+            </button>
+            <div id="extractSAMStatus" style="font-size:10px;color:#666;text-align:center;"></div>
+            <div id="extractSAMPreview" style="display:none;margin-top:6px;">
+                <img id="extractSAMImg" style="max-width:100%;max-height:100px;border-radius:4px;border:1px solid #2a2a3a;" />
+                <div style="font-size:10px;color:#888;margin-top:2px;">Mask từ SAM — dùng để tạo mask chính xác</div>
+            </div>
+        </div>
+
+        <!-- Step 2: Crop visible part -->
+        <div class="section">
+            <h2>② Crop phần visible</h2>
+            <div style="display:flex;gap:4px;">
+                <button class="btn-sm" id="extractCropBtn" style="flex:1;text-align:center;">✂️ Crop object visible</button>
+                <button class="btn-sm" id="extractClearCropBtn" style="flex:1;text-align:center;">🗑 Xoá</button>
+            </div>
+            <div id="extractCropPreview" style="display:none;margin-top:6px;">
+                <img id="extractCropImg" style="max-width:100%;max-height:100px;border-radius:4px;border:1px solid #2a2a3a;" />
+            </div>
+            <div style="font-size:10px;color:#888;margin-top:4px;">
+                Crop phần object visible để AI tham chiếu style/texture
+            </div>
+        </div>
+
+        <!-- Step 3: Draw mask for hidden part -->
+        <div class="section">
+            <h2>③ Khoanh vùng BỊ ẨN</h2>
+            <div class="region-tools">
+                <button class="region-btn active" data-tool="rect" id="extractRectBtn">▭ Rect</button>
+                <button class="region-btn" data-tool="polygon" id="extractPolyBtn">✎ Freehand</button>
+            </div>
+            <div style="font-size:10px;color:#666;margin-top:4px">
+                Khoanh vùng PHẦN BỊ ẨN (chỉ phần cần AI vẽ thêm)
+            </div>
+            <div style="font-size:10px;color:#ffcc00;margin-top:4px;padding:6px;background:#2a2a1a;border-radius:6px;border:1px solid #4a4a2a;">
+                ⚠️ <strong>Mask phải NHỎ</strong> — chỉ che phần bị ẩn, không che body/face/armor!
+            </div>
+        </div>
+
+        <!-- Options -->
+        <div class="section">
+            <h2>⚙️ Options</h2>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="extractTransparent"/>
+                    Xuất nền trong suốt (PNG)
+                </label>
+            </div>
+            <div class="form-group">
+                <label>
+                    <input type="checkbox" id="extractKeepStyle" checked/>
+                    Giữ nguyên style ảnh gốc
+                </label>
+            </div>
+        </div>
+
+        <!-- ComfyUI workflow -->
+        <div class="section">
+            <div style="font-size:10px;color:#888;padding:8px;background:#0f0f13;border-radius:6px;border:1px solid #1e1e2e;">
+                <strong>💡 ComfyUI Workflow (kết quả tốt nhất):</strong><br><br>
+                <strong>Bước 1:</strong> SAM segment visible cloak<br>
+                <strong>Bước 2:</strong> Tạo full cloak guide bằng lineart/canny<br>
+                <strong>Bước 3:</strong> Inpaint chỉ vùng bị che + low denoise (0.3-0.5)<br>
+                <strong>Bước 4:</strong> ControlNet lineart/canny giữ đường biên<br>
+                <strong>Bước 5:</strong> IP-Adapter/reference giữ style, màu, pattern<br><br>
+                <strong>Tool này:</strong> Dùng được cho edit đơn giản.<br>
+                Cho amodal completion chính xác → dùng ComfyUI + SAM + ControlNet.
+            </div>
+        </div>
+
+        <!-- Action buttons -->
+        <div class="section">
+            <h2>📋 Copy theo thứ tự</h2>
+            <button class="btn-primary" id="extractCopyOrigBtn" style="font-size:11px;padding:8px;margin-bottom:4px;">
+                <span class="spinner"></span>
+                <span class="label-text">📋 ① Copy ảnh gốc</span>
+            </button>
+            <button class="btn-primary" id="extractCopyMaskBtn" style="font-size:11px;padding:8px;margin-bottom:4px;background:#2a6a4a;">
+                <span class="spinner"></span>
+                <span class="label-text">📋 ② Copy ảnh mask</span>
+            </button>
+            <button class="btn-primary" id="extractCopyCropBtn" style="font-size:11px;padding:8px;margin-bottom:4px;background:#6a6a2a;display:none;">
+                <span class="spinner"></span>
+                <span class="label-text">📋 ③ Copy reference crop</span>
+            </button>
+            <button class="btn-primary" id="extractCopyPromptBtn" style="font-size:11px;padding:8px;background:#6a4a6a;">
+                <span class="spinner"></span>
+                <span class="label-text">📋 ④ Copy prompt</span>
+            </button>
+            <div style="font-size:10px;color:#666;margin-top:4px;text-align:center;">
+                Paste ①②③④ vào Gemini theo thứ tự
+            </div>
+        </div>
+
+        <!-- Prompt output -->
+        <div class="section">
+            <div class="prompt-label"><span>📝 Prompt cho Gemini</span></div>
+            <div class="prompt-box" id="extractPromptOutput">Khoanh vùng object để tạo prompt</div>
+        </div>
+
+        <!-- Status -->
+        <div id="extractStatus" style="font-size:11px;color:#666;text-align:center;margin-top:4px;"></div>
     </div>
 </div>
 
@@ -359,7 +648,7 @@ document.querySelectorAll('.tab').forEach(tab=>{
         tab.classList.add('active');
         $(`pane-${tab.dataset.tab}`).classList.add('active');
         // resize canvas after tab switch
-        setTimeout(()=>{if(window['resizeGridCanvas'])resizeGridCanvas();if(window['resizeRegionCanvas'])resizeRegionCanvas()},50);
+        setTimeout(()=>{if(window['resizeGridCanvas'])resizeGridCanvas();if(window['resizeRegionCanvas'])resizeRegionCanvas();if(window['resizeExtractCanvas'])resizeExtractCanvas()},50);
     });
 });
 
@@ -542,6 +831,8 @@ let regions=[], nextRegionId=1;
 let activeTool=null; // 'rect' | 'ellipse' | 'polygon' | 'select'
 let drawing=false, startPoint=null, currentPoints=[];
 let selectedRegionId=null;
+let lastMousePos=null;
+let regionRedrawPending=false;
 
 const REGION_COLORS=['#FF6B6B','#4ECDC4','#45B7D1','#96CEB4','#FFEAA7','#DDA0DD','#F7DC6F','#BB8FCE','#85C1E9','#F0B27A','#82E0AA','#E74C3C'];
 
@@ -561,8 +852,8 @@ document.querySelectorAll('#pane-region .region-btn').forEach(btn=>{
     });
 });
 
-// File
-drop.addEventListener('click',()=>{if(!drawing)fileInput.click()});
+// File — separate button only, no click on canvas area
+$('regionFileBtn').addEventListener('click',()=>fileInput.click());
 drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('dragover')});
 drop.addEventListener('dragleave',()=>drop.classList.remove('dragover'));
 drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('dragover');if(e.dataTransfer.files.length)loadFile(e.dataTransfer.files[0])});
@@ -584,7 +875,7 @@ window.resizeRegionCanvas=function(){
     canvas.style.width=canvas.width+'px'; canvas.style.height=canvas.height+'px';
 };
 
-// ── Canvas Interaction ──
+// ── Canvas Interaction (with throttling) ──
 canvas.addEventListener('mousedown',e=>{
     e.stopPropagation();
     if(!sourceImage||!activeTool)return;
@@ -607,27 +898,59 @@ canvas.addEventListener('mousedown',e=>{
 
     drawing=true;
     startPoint=pos;
+    lastMousePos=pos;
     if(activeTool==='polygon'){currentPoints=[imgFromCanvas(pos)]}
 });
 
-canvas.addEventListener('mousemove',e=>{
+// Canvas mousemove removed - using document-level handler below
+
+// Clamp position to canvas bounds
+function clampToCanvas(pos){
+    return {
+        x:Math.max(0,Math.min(pos.x,canvas.width)),
+        y:Math.max(0,Math.min(pos.y,canvas.height))
+    };
+}
+
+// Track mouse on document level (so we don't lose it when leaving canvas)
+document.addEventListener('mousemove',e=>{
     if(!drawing||!sourceImage||!activeTool)return;
-    const pos=getCanvasPos(canvas,e);
+    const rect=canvas.getBoundingClientRect();
+    const pos={
+        x:(e.clientX-rect.left)*(canvas.width/rect.width),
+        y:(e.clientY-rect.top)*(canvas.height/rect.height)
+    };
+    lastMousePos=clampToCanvas(pos);
 
     if(activeTool==='polygon'){
-        currentPoints.push(imgFromCanvas(pos));
+        const last=currentPoints[currentPoints.length-1];
+        const imgPos=imgFromCanvas(lastMousePos);
+        const dist=Math.hypot(imgPos.x-last.x,imgPos.y-last.y);
+        if(dist>5)currentPoints.push(imgPos);
     }
-    redraw();
+
+    if(!regionRedrawPending){
+        regionRedrawPending=true;
+        requestAnimationFrame(()=>{
+            redraw();
+            regionRedrawPending=false;
+        });
+    }
 });
 
-canvas.addEventListener('mouseup',e=>{
+document.addEventListener('mouseup',e=>{
     if(!drawing||!sourceImage)return;
     drawing=false;
-    if(!activeTool||activeTool==='select')return;
+    if(!activeTool||activeTool==='select'){lastMousePos=null;return}
 
-    const pos=getCanvasPos(canvas,e);
+    const rect=canvas.getBoundingClientRect();
+    const pos={
+        x:(e.clientX-rect.left)*(canvas.width/rect.width),
+        y:(e.clientY-rect.top)*(canvas.height/rect.height)
+    };
+    const clampedPos=clampToCanvas(pos);
     const imgStart=imgFromCanvas(startPoint);
-    const imgEnd=imgFromCanvas(pos);
+    const imgEnd=imgFromCanvas(clampedPos);
 
     const dx=Math.abs(imgEnd.x-imgStart.x), dy=Math.abs(imgEnd.y-imgStart.y);
     if(dx<3&&dy<3)return; // too small, ignore
@@ -638,23 +961,23 @@ canvas.addEventListener('mouseup',e=>{
     if(activeTool==='rect'){
         const x1=Math.min(imgStart.x,imgEnd.x), y1=Math.min(imgStart.y,imgEnd.y);
         const x2=Math.max(imgStart.x,imgEnd.x), y2=Math.max(imgStart.y,imgEnd.y);
-        regions.push({id,type:'rectangle',color,data:{x1,y1,x2,y2},label:''});
+        regions.push({id,type:'rectangle',color,data:{x1,y1,x2,y2},label:'',mode:'edit-style'});
     } else if(activeTool==='ellipse'){
         const cx=(imgStart.x+imgEnd.x)/2, cy=(imgStart.y+imgEnd.y)/2;
         const rx=Math.abs(imgEnd.x-imgStart.x)/2, ry=Math.abs(imgEnd.y-imgStart.y)/2;
-        regions.push({id,type:'ellipse',color,data:{cx,cy,rx,ry},label:''});
+        regions.push({id,type:'ellipse',color,data:{cx,cy,rx,ry},label:'',mode:'edit-style'});
     } else if(activeTool==='polygon'&&currentPoints.length>2){
         const pts=currentPoints.map(p=>[Math.round(p.x),Math.round(p.y)]);
-        regions.push({id,type:'polygon',color,data:{points:pts},label:''});
+        regions.push({id,type:'polygon',color,data:{points:pts},label:'',mode:'edit-style'});
         currentPoints=[];
     }
 
-    startPoint=null; selectedRegionId=null;
+    startPoint=null; selectedRegionId=null; lastMousePos=null;
     updateRegionList(); updatePrompt(); redraw();
     showToast(`✅ Region #${id} created`);
 });
 
-canvas.addEventListener('mouseleave',()=>{if(drawing){drawing=false;redraw()}});
+// Canvas mouseleave removed - using document-level handlers
 
 // ── Coordinate mapping ──
 function imgFromCanvas(cp){
@@ -694,16 +1017,25 @@ function updateRegionList(){
     el.innerHTML=regions.map(r=>{
         const label=r.label||`Region #${r.id}`;
         const typ={'rectangle':'Rect','ellipse':'Ellipse','polygon':'Poly'}[r.type]||r.type;
+        const mode=r.mode||'edit-style';
+        const modeOptions=[
+            {value:'preserve',label:'🔒 Preserve'},
+            {value:'edit-style',label:'🎨 Edit Style'},
+            {value:'edit-content',label:'✏️ Edit Content'},
+            {value:'mask-only',label:'🎭 Mask Only'}
+        ].map(o=>`<option value="${o.value}"${mode===o.value?' selected':''}>${o.label}</option>`).join('');
         return `<div class="region-item${selectedRegionId===r.id?' selected':''}" data-id="${r.id}">
             <input type="color" class="rc" value="${r.color}" data-id="${r.id}"/>
             <span class="rl"><b>#${r.id}</b> ${typ} — ${label}</span>
+            <select class="region-mode" data-id="${r.id}" style="padding:2px 4px;border-radius:4px;border:1px solid #2a2a3a;background:#0f0f13;color:#e0e0e0;font-size:10px;max-width:90px;">${modeOptions}</select>
             <button class="btn-del" data-id="${r.id}">✕</button>
         </div>`;
     }).join('');
 
     el.querySelectorAll('.rc').forEach(inp=>{inp.addEventListener('input',e=>{const r=regions.find(x=>x.id===parseInt(e.target.dataset.id));if(r){r.color=e.target.value;redraw()}})});
+    el.querySelectorAll('.region-mode').forEach(sel=>{sel.addEventListener('change',e=>{e.stopPropagation();const r=regions.find(x=>x.id===parseInt(e.target.dataset.id));if(r){r.mode=e.target.value;updatePrompt()}})});
     el.querySelectorAll('.btn-del').forEach(btn=>{btn.addEventListener('click',e=>{const id=parseInt(e.target.dataset.id);regions=regions.filter(x=>x.id!==id);if(selectedRegionId===id){selectedRegionId=null;$('regionLabelRow').style.display='none'}updateRegionList();updatePrompt();redraw();showToast(`🗑 Region #${id} deleted`)})});
-    el.querySelectorAll('.region-item').forEach(item=>{item.addEventListener('click',e=>{if(e.target.closest('.btn-del')||e.target.closest('.rc'))return;selectedRegionId=parseInt(item.dataset.id);updateRegionList();showRegionLabel(selectedRegionId);redraw()})});
+    el.querySelectorAll('.region-item').forEach(item=>{item.addEventListener('click',e=>{if(e.target.closest('.btn-del')||e.target.closest('.rc')||e.target.closest('.region-mode'))return;selectedRegionId=parseInt(item.dataset.id);updateRegionList();showRegionLabel(selectedRegionId);redraw()})});
 }
 
 function showRegionLabel(id){
@@ -726,6 +1058,104 @@ $('regionLabelInput').addEventListener('keydown',e=>{if(e.key==='Enter')$('apply
 
 $('clearRegions').addEventListener('click',()=>{if(regions.length){regions=[];selectedRegionId=null;$('regionLabelRow').style.display='none';updateRegionList();updatePrompt();redraw();showToast('🗑 Regions cleared')}});
 
+// ── Style Reference Image ──
+let styleRefImage=null;
+const styleRefArea=$('styleRefArea'),styleRefInput=$('styleRefInput'),styleRefPreview=$('styleRefPreview'),styleRefPlaceholder=$('styleRefPlaceholder'),clearStyleRefBtn=$('clearStyleRef');
+
+styleRefArea.addEventListener('click',()=>styleRefInput.click());
+styleRefInput.addEventListener('change',()=>{
+    if(!styleRefInput.files.length)return;
+    const file=styleRefInput.files[0];
+    if(!file.type.startsWith('image/'))return showToast('Chọn file ảnh');
+    const r=new FileReader();
+    r.onload=e=>{
+        const img=new Image();
+        img.onload=()=>{
+            styleRefImage=img;
+            styleRefPreview.src=e.target.result;
+            styleRefPreview.style.display='block';
+            styleRefPlaceholder.style.display='none';
+            clearStyleRefBtn.style.display='block';
+            updatePrompt();
+            updateStyleRefButton();
+            showToast('✅ Style reference loaded');
+        };
+        img.src=e.target.result;
+    };
+    r.readAsDataURL(file);
+});
+clearStyleRefBtn.addEventListener('click',e=>{
+    e.stopPropagation();
+    styleRefImage=null;
+    styleRefPreview.style.display='none';
+    styleRefPlaceholder.style.display='block';
+    clearStyleRefBtn.style.display='none';
+    styleRefInput.value='';
+    updatePrompt();
+    updateStyleRefButton();
+});
+
+// ── Prompt Mode ──
+const promptMode=$('promptMode'),promptModeHint=$('promptModeHint');
+const modeHints={
+    'style-transfer':'Giữ nguyên phong cách nghệ thuật, chỉ thay đổi nội dung trong vùng chọn',
+    'game-reskin':'Đổi style nhân vật/assets theo style reference, giữ nguyên form dáng',
+    'character-edit':'Thay đổi chi tiết nhân vật (mắt, tóc, quần áo) nhưng giữ nguyên tổng thể',
+    'preserve':'Chỉ đánh dấu vùng, không thay đổi gì (dùng cho reference)'
+};
+promptMode.addEventListener('change',()=>{
+    promptModeHint.textContent=modeHints[promptMode.value]||'';
+    updatePrompt();
+});
+
+// ── Art Style Type ──
+const artStyleType=$('artStyleType'),artStyleHint=$('artStyleHint');
+const styleHints={
+    'auto':'AI sẽ tự nhận diện style từ ảnh gốc',
+    'hand-drawn':'Nét vẽ tay tự nhiên, không đều, có thể có lỗi nhỏ',
+    'sketch':'Phác thảo, đường nét chưa hoàn thiện, có thể thấy giấy bên dưới',
+    'flat-color':'Màu phẳng, không gradient, không blending',
+    'cel-shaded':'Tô màu theo vùng rõ ràng, anime style',
+    'concept-art':'Phác thảo ý tưởng, có thể chưa hoàn thiện',
+    'pixel-art':'Đồ họa pixel, giới hạn palette màu',
+    'watercolor':'Màu nước, loang lổ, trong suốt, có thể lem',
+    'oil-painting':'Sơn dầu, brush strokes rõ ràng, texture dày'
+};
+artStyleType.addEventListener('change',()=>{
+    artStyleHint.textContent=styleHints[artStyleType.value]||'';
+    updatePrompt();
+});
+
+// ── Preset Templates ──
+const presets={
+    'face':{label:'Khuôn mặt — giữ nguyên五官, chỉ đổi style',mode:'edit-style'},
+    'hair':{label:'Tóc — đổi màu/style tóc',mode:'edit-style'},
+    'body':{label:'Cơ thể — giữ nguyên form, đổi style',mode:'edit-style'},
+    'bg':{label:'Background — thay đổi phông nền',mode:'edit-content'},
+    'clothes':{label:'Quần áo — đổi trang phục',mode:'edit-content'},
+    'eyes':{label:'Mắt — đổi màu/style mắt',mode:'edit-style'}
+};
+document.querySelectorAll('.preset-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+        const preset=presets[btn.dataset.preset];
+        if(!preset)return;
+        // If a region is selected, apply preset to it
+        if(selectedRegionId){
+            const r=regions.find(x=>x.id===selectedRegionId);
+            if(r){
+                r.label=preset.label;
+                r.mode=preset.mode;
+                updateRegionList();updatePrompt();
+                showToast(`✅ Preset "${btn.dataset.preset}" applied`);
+                return;
+            }
+        }
+        // Otherwise, set the label input for next region
+        $('regionLabelInput').value=preset.label;
+        showToast(`💡 Preset ready — vẽ region để áp dụng`);
+    });
+});
+
 // ── Prompt (Gemini-friendly) ──
 const COLOR_NAMES = {'#FF6B6B':'red','#4ECDC4':'teal','#45B7D1':'blue','#96CEB4':'green','#FFEAA7':'yellow','#DDA0DD':'purple','#F7DC6F':'gold','#BB8FCE':'violet','#85C1E9':'sky blue','#F0B27A':'orange','#82E0AA':'mint','#E74C3C':'dark red'};
 
@@ -740,26 +1170,154 @@ function updatePrompt(){
     if(!regions.length){el.textContent='Chưa có region nào. Hãy vẽ region trước, sau đó ghi chú mô tả cho từng vùng.';return}
     const imgW=sourceImage?.width||'?', imgH=sourceImage?.height||'?';
     const style=($('imageStyle').value||'').trim();
-    const lines=[
-        `[Original image: ${imgW}×${imgH}px]`,
-        style ? `[Art style: ${style}]` : '',
-        '',
-        'IMPORTANT: Keep the exact original image dimensions (do NOT upscale or resize).',
-        style ? `Maintain the original art style (${style}) consistently.` : 'Maintain the original art style, texture, lighting and proportions consistently.',
-        'Edit ONLY the areas inside the colored outlines. Each outline has a description below.',
-        '',
-    ];
+    const mode=promptMode.value;
+    const hasStyleRef=!!styleRefImage;
+    const artType=artStyleType.value;
+
+    // Style-specific preservation instructions
+    const stylePreservation={
+        'auto':'Match the exact drawing quality, line work, coloring, and detail level of the original image.',
+        'hand-drawn':'Preserve hand-drawn roughness: loose lines, imperfect edges, natural variations, visible pen/pencil strokes. Do not make lines cleaner or smoother.',
+        'sketch':'Keep sketch quality: rough lines, construction marks, unfinished areas, visible paper texture. Do not complete or polish the sketch.',
+        'flat-color':'Maintain flat colors: no gradients, no blending, no shading beyond simple cell shading. Keep colors solid and separate.',
+        'cel-shaded':'Preserve cel-shading: hard edge shadows, limited color steps, anime-style shading blocks. Do not add soft gradients or realistic lighting.',
+        'concept-art':'Keep concept art feel: loose brushwork, suggestive details, painterly approach, not fully rendered. Do not add fine details or polish.',
+        'pixel-art':'Maintain pixel art: limited palette, visible pixels, no anti-aliasing, chunky shapes. Do not smooth or add sub-pixel detail.',
+        'watercolor':'Preserve watercolor look: color bleeding, transparency, paper texture showing through, soft edges, unpredictable color flow. Do not make it clean or opaque.',
+        'oil-painting':'Keep oil painting texture: visible brush strokes, thick paint texture, color mixing on canvas, impasto effects. Do not smooth or digitalize.'
+    };
+
+    const lines=[];
+
+    // CRITICAL: Style observation instruction
+    lines.push('═══════════════════════════════════════════════════════');
+    lines.push('⚠️ FOLLOW THESE STEPS EXACTLY:');
+    lines.push('═══════════════════════════════════════════════════════');
+    lines.push('');
+    lines.push('YOU RECEIVED MULTIPLE IMAGES:');
+    lines.push('- Image ①: ORIGINAL IMAGE — observe the art style here');
+    if(hasStyleRef)lines.push('- Image ③: STYLE REFERENCE (optional — use only if original style unclear)');
+    lines.push('- Image ②: REGIONS OVERLAY — colored outlines show where to edit');
+    lines.push('');
+    lines.push('STEP 1: OBSERVE ORIGINAL IMAGE STYLE (Image ①)');
+    lines.push('- Identify art style: cartoon, chibi, anime, semi-realistic, pixel art, etc.');
+    lines.push('- Note: line work (thick/thin, clean/sketchy)');
+    lines.push('- Note: coloring (flat, cel-shaded, gradient, painterly)');
+    lines.push('- Note: shading (hard shadows, soft shadows, none)');
+    lines.push('- Note: texture (smooth, rough, grainy, brush strokes)');
+    lines.push('');
+    lines.push('STEP 2: EDIT ONLY INSIDE REGIONS (Image ②)');
+    lines.push('- Look at regions overlay: colored outlines show where to edit');
+    lines.push('- ONLY modify pixels INSIDE the colored outlines');
+    lines.push('- DO NOT touch ANYTHING outside the outlines');
+    lines.push('- Keep background, surrounding areas EXACTLY as original');
+    lines.push('');
+    lines.push('STEP 3: MAINTAIN EXACT STYLE');
+    lines.push('- Edited regions MUST match original style EXACTLY');
+    lines.push('- Do NOT change cartoon → semi-realistic');
+    lines.push('- Do NOT change chibi → realistic proportions');
+    lines.push('- Do NOT change cel-shaded → painterly');
+    lines.push('- Apply edits as if same artist drew them in same session');
+    lines.push('');
+    lines.push('STEP 4: YOU ARE PATCHING PIXELS, NOT GENERATING ART');
+    lines.push('- This is a RESTORATION/MATCHING task, NOT a generation task');
+    lines.push('- Replace only the selected region — do not "create" or "improve"');
+    lines.push('');
+    lines.push('STYLE-SPECIFIC PRESERVATION:');
+    lines.push(`- ${stylePreservation[artType]}`);
+    lines.push('');
+    lines.push('GENERAL PRESERVATION RULES:');
+    lines.push('- Match the exact drawing quality of the original image');
+    lines.push('- Preserve: line quality, color treatment, detail level, shading, texture, finish level');
+    lines.push('- Do NOT add: extra folds, highlights, texture, realism, polish');
+    lines.push('- Do NOT make it cleaner, sharper, or more detailed than original');
+    lines.push('- The result should look like the SAME ARTIST, SAME SESSION');
+    lines.push('');
+    lines.push('═══════════════════════════════════════════════════════');
+    lines.push('');
+
+    // Header based on mode
+    if(mode==='game-reskin'){
+        lines.push(`[Game Reskin — ${imgW}×${imgH}px]`);
+        lines.push('');
+        lines.push('GAME ASSET REQUIREMENTS:');
+        lines.push('- Maintain exact original dimensions, no resize');
+        lines.push('- Clean edges, production-ready output');
+        lines.push('- Preserve character silhouette and proportions');
+        lines.push('- MATCH ORIGINAL ART STYLE EXACTLY (see style observation above)');
+        lines.push('');
+    } else if(mode==='style-transfer'){
+        lines.push(`[Style Transfer — ${imgW}×${imgH}px]`);
+        if(style)lines.push(`[User described style: ${style}]`);
+        lines.push('');
+        lines.push('STYLE PRESERVATION:');
+        lines.push('- Keep exact original image dimensions');
+        lines.push('- FIRST: Observe original image style (see style observation above)');
+        lines.push('- THEN: Maintain that exact style across all edits');
+        if(style)lines.push(`- User describes style as: "${style}" — verify this matches what you observe`);
+        lines.push('- Edit ONLY areas inside colored outlines');
+        lines.push('');
+    } else if(mode==='character-edit'){
+        lines.push(`[Character Edit — ${imgW}×${imgH}px]`);
+        lines.push('');
+        lines.push('IDENTITY + STYLE PRESERVATION:');
+        lines.push('- CRITICAL: Face must remain almost identical to original');
+        lines.push('- Preserve: facial features, bone structure, proportions, eye shape, nose, lips, jawline');
+        lines.push('- Apply edits as filter over preserved identity, not reinterpretation');
+        lines.push('- Subject must remain immediately recognizable');
+        lines.push('- MAINTAIN ORIGINAL ART STYLE (see style observation above)');
+        lines.push('');
+    } else {
+        lines.push(`[Preserve Mode — ${imgW}×${imgH}px]`);
+        lines.push('');
+        lines.push('This image is for reference only. Do not modify.');
+        lines.push('');
+    }
+
+    // Regions with mode-specific instructions
+    lines.push('REGIONS TO EDIT:');
     regions.forEach(r=>{
         const desc=r.label&&r.label!==`Region #${r.id}`?r.label:'[mô tả của bạn]';
         const cname=colorName(r.color);
         const typ={'rectangle':'rect','ellipse':'ellipse','polygon':'freehand'}[r.type]||r.type;
-        lines.push(`• Region #${r.id} (${cname} ${typ} outline): ${desc}`);
+        const rMode=r.mode||'edit-style';
+        const modeLabel={'preserve':'🔒 PRESERVE','edit-style':'🎨 EDIT STYLE','edit-content':'✏️ EDIT CONTENT','mask-only':'🎭 MASK ONLY'}[rMode]||'';
+
+        let instruction='';
+        if(rMode==='preserve'){
+            instruction=' — Keep exactly as-is, no changes';
+        } else if(rMode==='edit-style'){
+            instruction=' — Change content only, MAINTAIN ORIGINAL ART STYLE';
+        } else if(rMode==='edit-content'){
+            instruction=' — Change content/details, MAINTAIN ORIGINAL ART STYLE';
+        } else if(rMode==='mask-only'){
+            instruction=' — Mask region for selection only';
+        }
+
+        lines.push(`• Region #${r.id} (${cname} ${typ}) [${modeLabel}]: ${desc}${instruction}`);
     });
-    lines.push(
-        '',
-        'Keep everything outside the outlines exactly as-is.',
-        'Do not change the overall image size or aspect ratio.',
-    );
+
+    // Footer
+    lines.push('');
+    lines.push('FINAL CONSTRAINTS:');
+    lines.push('- Keep everything outside outlines exactly as-is');
+    lines.push('- Do not change overall image size or aspect ratio');
+    lines.push('');
+    lines.push('STYLE PRESERVATION (apply to ALL edited regions):');
+    lines.push(`- ${stylePreservation[artType]}`);
+    lines.push('- Match the exact brushiness, line irregularity, color flatness');
+    lines.push('- Keep the same level of detail as the original');
+    lines.push('- Do not add texture, lighting, folds, shading, or refinement');
+    lines.push('- Blend seamlessly with surrounding image');
+    lines.push('- Preserve the same artistic roughness');
+    lines.push('');
+    lines.push('NO ENHANCEMENT:');
+    lines.push('- Do not make it cleaner, sharper, or more realistic');
+    lines.push('- Do not add polish, smoothness, or "improvement"');
+    lines.push('- You are patching pixels, not generating art');
+    lines.push('');
+    lines.push('- No watermarks, no text overlays');
+
     el.textContent=lines.join('\n');
 }
 
@@ -770,8 +1328,6 @@ $('copyPrompt').addEventListener('click',()=>{
 });
 
 // ── Drawing on canvas ──
-let lastMousePos=null;
-
 function drawRegions(c,w,h){
     if(!sourceImage)return;
     const imgW=sourceImage.width, imgH=sourceImage.height;
@@ -841,16 +1397,7 @@ function redraw(){
     drawRegions(ctx,w,h);
 }
 
-canvas.addEventListener('mousemove',e=>{
-    if(!sourceImage)return;
-    lastMousePos=getCanvasPos(canvas,e);
-    if(drawing&&activeTool==='polygon'){
-        const imgP=imgFromCanvas(lastMousePos);
-        const last=currentPoints.length?currentPoints[currentPoints.length-1]:null;
-        if(!last||Math.hypot(imgP.x-last.x,imgP.y-last.y)>3)currentPoints.push(imgP);
-    }
-    redraw();
-});
+// Second mousemove handler removed - using throttled version above
 
 // ── Helper: fetch overlay blob from server ──
 async function fetchOverlayBlob(){
@@ -864,33 +1411,204 @@ async function fetchOverlayBlob(){
     return res.blob();
 }
 
-// ── Copy overlay to clipboard ──
-$('regionCopyBtn').addEventListener('click',async()=>{
-    if(!sourceImage)return showToast('Vui lòng chọn ảnh trước');
-    if(!regions.length)return showToast('Chưa có region nào');
-    const btn=$('regionCopyBtn');btn.classList.add('loading');btn.disabled=true;
-    try{
-        const blob=await fetchOverlayBlob();
-        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
-        showToast('✅ Đã copy ảnh! Vào Gemini chat Ctrl+V');
-    }catch(e){
-        showToast('❌ Copy thất bại: '+e.message);
-    }finally{btn.classList.remove('loading');btn.disabled=false}
-});
+// ── Helper: get original image blob ──
+async function fetchOriginalBlob(){
+    const r=await fetch(sourceImage.src);
+    return await r.blob();
+}
 
-// ── Download overlay image ──
-$('regionDownloadBtn').addEventListener('click',async()=>{
+// ── Helper: add label to image ──
+async function addLabelToBlob(blob, label, color='#fff'){
+    const img=await createImageBitmap(blob);
+    const c=document.createElement('canvas');
+    c.width=img.width;c.height=img.height+28;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#1a1a24';ctx.fillRect(0,0,c.width,c.height);
+    ctx.drawImage(img,0,28);
+    ctx.fillStyle=color;ctx.font='bold 13px sans-serif';
+    ctx.fillText(label,10,18);
+    return new Promise(resolve=>c.toBlob(b=>resolve(b),'image/png'));
+}
+
+// ── Copy single image to clipboard ──
+async function copyImageToClipboard(blob, label){
+    const labeledBlob=await addLabelToBlob(blob, label);
+    await navigator.clipboard.write([new ClipboardItem({'image/png':labeledBlob})]);
+}
+
+// ── Copy Original Image ──
+$('copyOrigBtn').addEventListener('click',async()=>{
     if(!sourceImage)return showToast('Vui lòng chọn ảnh trước');
-    if(!regions.length)return showToast('Chưa có region nào');
-    const btn=$('regionDownloadBtn');btn.classList.add('loading');btn.disabled=true;
+    const btn=$('copyOrigBtn');btn.classList.add('loading');btn.disabled=true;
     try{
-        const blob=await fetchOverlayBlob();
-        const u=URL.createObjectURL(blob);const a=document.createElement('a');
-        a.href=u;a.download='overlay-regions.png';a.click();URL.revokeObjectURL(u);
-        showToast('✅ Downloaded! Upload ảnh + prompt lên Gemini');
+        const origBlob=await fetchOriginalBlob();
+        await copyImageToClipboard(origBlob, '① ORIGINAL IMAGE — AI: Observe style here (cartoon, chibi, anime...)');
+        showToast('✅ Đã copy ảnh GỐC! Paste vào Gemini');
     }catch(e){showToast('❌ '+e.message)}
     finally{btn.classList.remove('loading');btn.disabled=false}
 });
+
+// ── Copy Regions Overlay ──
+$('copyOverlayBtn').addEventListener('click',async()=>{
+    if(!sourceImage)return showToast('Vui lòng chọn ảnh trước');
+    if(!regions.length)return showToast('Chưa có region nào');
+    const btn=$('copyOverlayBtn');btn.classList.add('loading');btn.disabled=true;
+    try{
+        const overlayBlob=await fetchOverlayBlob();
+        await copyImageToClipboard(overlayBlob, '② REGIONS — AI: Edit ONLY inside colored outlines');
+        showToast('✅ Đã copy ảnh REGION! Paste vào Gemini');
+    }catch(e){showToast('❌ '+e.message)}
+    finally{btn.classList.remove('loading');btn.disabled=false}
+});
+
+// ── Copy Style Reference ──
+$('copyStyleRefBtn').addEventListener('click',async()=>{
+    if(!styleRefImage)return showToast('Chưa có style reference');
+    const btn=$('copyStyleRefBtn');btn.classList.add('loading');btn.disabled=true;
+    try{
+        const c=document.createElement('canvas');
+        c.width=styleRefImage.width;c.height=styleRefImage.height;
+        c.getContext('2d').drawImage(styleRefImage,0,0);
+        const blob=await new Promise(r=>c.toBlob(b=>r(b),'image/png'));
+        await copyImageToClipboard(blob, '③ STYLE REFERENCE — AI: Use this style if original unclear');
+        showToast('✅ Đã copy STYLE REF! Paste vào Gemini');
+    }catch(e){showToast('❌ '+e.message)}
+    finally{btn.classList.remove('loading');btn.disabled=false}
+});
+
+// ── Download all images ──
+$('regionDownloadBtn').addEventListener('click',async()=>{
+    if(!sourceImage)return showToast('Vui lòng chọn ảnh trước');
+    const btn=$('regionDownloadBtn');btn.classList.add('loading');btn.disabled=true;
+    try{
+        // Download original with label
+        const origBlob=await fetchOriginalBlob();
+        const labeledOrig=await addLabelToBlob(origBlob, '① ORIGINAL — AI: Observe style here');
+        downloadBlob(labeledOrig,'01-original-image.png');
+        await new Promise(r=>setTimeout(r,300));
+
+        // Download overlay with label
+        if(regions.length){
+            const overlayBlob=await fetchOverlayBlob();
+            const labeledOverlay=await addLabelToBlob(overlayBlob, '② REGIONS — AI: Edit ONLY inside outlines', '#4ecdc4');
+            downloadBlob(labeledOverlay,'02-regions-overlay.png');
+            await new Promise(r=>setTimeout(r,300));
+        }
+
+        // Download style ref with label
+        if(styleRefImage){
+            const c=document.createElement('canvas');
+            c.width=styleRefImage.width;c.height=styleRefImage.height;
+            c.getContext('2d').drawImage(styleRefImage,0,0);
+            const srBlob=await new Promise(r=>c.toBlob(b=>r(b),'image/png'));
+            const labeledSR=await addLabelToBlob(srBlob, '③ STYLE REF — AI: Use this style', '#ffcc00');
+            downloadBlob(labeledSR,'03-style-reference.png');
+        }
+
+        showToast('✅ Đã download tất cả ảnh!');
+    }catch(e){showToast('❌ '+e.message)}
+    finally{btn.classList.remove('loading');btn.disabled=false}
+});
+
+function downloadBlob(blob,filename){
+    const u=URL.createObjectURL(blob);const a=document.createElement('a');
+    a.href=u;a.download=filename;a.click();URL.revokeObjectURL(u);
+}
+
+// ── Show/hide style ref copy button ──
+function updateStyleRefButton(){
+    const btn=$('copyStyleRefBtn');
+    if(styleRefImage){
+        btn.style.display='block';
+    } else {
+        btn.style.display='none';
+    }
+}
+
+// ── Export Individual Masks ──
+function exportRegionMask(regionId){
+    if(!sourceImage)return;
+    const r=regions.find(x=>x.id===regionId);
+    if(!r)return;
+    const c=document.createElement('canvas');
+    c.width=sourceImage.width;c.height=sourceImage.height;
+    const ctx=c.getContext('2d');
+    // Draw black background
+    ctx.fillStyle='#000';ctx.fillRect(0,0,c.width,c.height);
+    // Draw white mask for the region
+    ctx.fillStyle='#fff';ctx.strokeStyle='#fff';ctx.lineWidth=1;
+    if(r.type==='rectangle'){
+        const d=r.data;ctx.fillRect(d.x1,d.y1,d.x2-d.x1,d.y2-d.y1);
+    } else if(r.type==='ellipse'){
+        const d=r.data;ctx.beginPath();ctx.ellipse(d.cx,d.cy,d.rx,d.ry,0,0,Math.PI*2);ctx.fill();
+    } else if(r.type==='polygon'){
+        const pts=r.data.points;if(pts.length>=3){ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);ctx.closePath();ctx.fill();}
+    }
+    c.toBlob(blob=>{
+        const u=URL.createObjectURL(blob);const a=document.createElement('a');
+        a.href=u;a.download=`mask-region-${regionId}.png`;a.click();URL.revokeObjectURL(u);
+        showToast(`✅ Mask #${regionId} exported`);
+    },'image/png');
+}
+
+function exportAllMasks(){
+    if(!sourceImage||!regions.length)return showToast('Chưa có region nào');
+    regions.forEach(r=>exportRegionMask(r.id));
+}
+
+// ── Export Sprite Sheet ──
+function exportSpriteSheet(){
+    if(!sourceImage||!regions.length)return showToast('Chưa có region nào');
+    const padding=10;
+    const cols=Math.ceil(Math.sqrt(regions.length));
+    const rows=Math.ceil(regions.length/cols);
+    const maxW=Math.max(...regions.map(r=>{
+        if(r.type==='rectangle')return r.data.x2-r.data.x1;
+        if(r.type==='ellipse')return r.data.rx*2;
+        if(r.type==='polygon')return Math.max(...r.data.points.map(p=>p[0]))-Math.min(...r.data.points.map(p=>p[0]));
+        return 100;
+    }));
+    const maxH=Math.max(...regions.map(r=>{
+        if(r.type==='rectangle')return r.data.y2-r.data.y1;
+        if(r.type==='ellipse')return r.data.ry*2;
+        if(r.type==='polygon')return Math.max(...r.data.points.map(p=>p[1]))-Math.min(...r.data.points.map(p=>p[1]));
+        return 100;
+    }));
+    const cellW=maxW+padding*2;const cellH=maxH+padding*2;
+    const c=document.createElement('canvas');
+    c.width=cellW*cols;c.height=cellH*rows;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#000';ctx.fillRect(0,0,c.width,c.height);
+    regions.forEach((r,i)=>{
+        const col=i%cols;const row=Math.floor(i/cols);
+        const ox=col*cellW+padding;const oy=row*cellH+padding;
+        ctx.save();ctx.translate(ox,oy);
+        ctx.fillStyle=r.color;ctx.strokeStyle=r.color;ctx.lineWidth=2;
+        if(r.type==='rectangle'){
+            const d=r.data;ctx.fillRect(0,0,d.x2-d.x1,d.y2-d.y1);
+        } else if(r.type==='ellipse'){
+            const d=r.data;ctx.beginPath();ctx.ellipse(d.rx,d.ry,d.rx,d.ry,0,0,Math.PI*2);ctx.fill();
+        } else if(r.type==='polygon'){
+            const pts=r.data.points;const minX=Math.min(...pts.map(p=>p[0]));const minY=Math.min(...pts.map(p=>p[1]));
+            ctx.beginPath();ctx.moveTo(pts[0][0]-minX,pts[0][1]-minY);for(let j=1;j<pts.length;j++)ctx.lineTo(pts[j][0]-minX,pts[j][1]-minY);ctx.closePath();ctx.fill();
+        }
+        ctx.fillStyle='#fff';ctx.font='bold 12px sans-serif';ctx.fillText(`#${r.id}`,4,14);
+        ctx.restore();
+    });
+    c.toBlob(blob=>{
+        const u=URL.createObjectURL(blob);const a=document.createElement('a');
+        a.href=u;a.download='sprite-sheet.png';a.click();URL.revokeObjectURL(u);
+        showToast('✅ Sprite sheet exported');
+    },'image/png');
+}
+
+// ── Export Button Listeners ──
+$('exportMaskBtn').addEventListener('click',()=>{
+    if(!selectedRegionId)return showToast('Chọn region trước');
+    exportRegionMask(selectedRegionId);
+});
+$('exportAllMasksBtn').addEventListener('click',exportAllMasks);
+$('exportSpriteBtn').addEventListener('click',exportSpriteSheet);
 
 // ── Init ──
 $('imageStyle').addEventListener('input', updatePrompt);
@@ -900,7 +1618,474 @@ console.log('✏️ Region tab ready');
 })();
 
 // ═══════════════════════════════════════════════════════════════
-//  TAB 3 — SEE-THROUGH (Body Parts + SAM Click + Inpaint)
+//  TAB 4 — OBJECT EXTRACT (Tách object, vẽ lại phần bị che)
+// ═══════════════════════════════════════════════════════════════
+(function(){
+const canvas=$('extractCanvas'),ctx=canvas.getContext('2d');
+const drop=$('extractDrop'),fileInput=$('extractFileInput'),fileLabel=$('extractFileLabel'),canvasArea=$('extractCanvasArea');
+const objectType=$('extractObjectType'),customObjectGroup=$('customObjectGroup'),customObjectInput=$('customObjectInput');
+const transparentCb=$('extractTransparent'),keepStyleCb=$('extractKeepStyle');
+const promptOutput=$('extractPromptOutput'),status=$('extractStatus');
+
+let sourceImage=null;
+let activeTool='rect';
+let drawing=false, startPoint=null, currentPoints=[];
+let maskRect=null, maskPolygon=null;
+let cropRect=null, cropImage=null;
+let isCropping=false;
+let lastMousePos=null;
+let redrawPending=false;
+
+// Object type names
+const objectNames={
+    'cloak':'cloak/áo choàng','hair':'hair/tóc','wings':'wings/cánh',
+    'skirt':'skirt/váy','cape':'cape/áo choàng siêu anh hùng',
+    'scarf':'scarf/khăn choàng','tail':'tail/đuôi','armor':'armor/giáp',
+    'weapon':'weapon/vũ khí','custom':''
+};
+
+// File handling
+$('extractFileBtn').addEventListener('click',()=>fileInput.click());
+drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('dragover')});
+drop.addEventListener('dragleave',()=>drop.classList.remove('dragover'));
+drop.addEventListener('drop',e=>{e.preventDefault();drop.classList.remove('dragover');if(e.dataTransfer.files.length)loadFile(e.dataTransfer.files[0])});
+fileInput.addEventListener('change',()=>{if(fileInput.files.length)loadFile(fileInput.files[0])});
+
+function loadFile(file){
+    if(!file.type.startsWith('image/'))return showToast('Chọn file ảnh');
+    const r=new FileReader();
+    r.onload=e=>{const img=new Image();img.onload=()=>{
+        sourceImage=img;maskRect=null;maskPolygon=null;
+        fileLabel.textContent=`${file.name} (${img.width}×${img.height})`;
+        fileLabel.style.display='block';canvasArea.classList.add('has-image');
+        resizeCanvas();redraw();updatePrompt();
+        showToast(`✅ ${file.name}`);
+    };img.src=e.target.result};
+    r.readAsDataURL(file);
+}
+
+function resizeCanvas(){
+    if(!sourceImage)return;
+    const rect=drop.getBoundingClientRect();
+    const s=Math.min((rect.width-16)/sourceImage.width,(rect.height-16)/sourceImage.height,1);
+    canvas.width=sourceImage.width*s;canvas.height=sourceImage.height*s;
+    canvas.style.width=canvas.width+'px';canvas.style.height=canvas.height+'px';
+}
+window.resizeExtractCanvas=resizeCanvas; // Keep same name for compatibility
+
+// Object type change
+objectType.addEventListener('change',()=>{
+    customObjectGroup.style.display=objectType.value==='custom'?'flex':'none';
+    updatePrompt();
+});
+customObjectInput.addEventListener('input',updatePrompt);
+
+// Tool selection
+document.querySelectorAll('#pane-extract .region-btn').forEach(btn=>{
+    btn.addEventListener('click',()=>{
+        activeTool=btn.dataset.tool;
+        document.querySelectorAll('#pane-extract .region-btn').forEach(b=>b.classList.remove('active'));
+        btn.classList.add('active');
+        maskRect=null;maskPolygon=null;redraw();updatePrompt();
+    });
+});
+
+// Crop functionality
+$('extractCropBtn').addEventListener('click',()=>{
+    if(!sourceImage)return showToast('Chọn ảnh trước');
+    isCropping=true;
+    canvas.style.cursor='crosshair';
+    showToast('Vẽ vùng quanh object VISIBLE (phần không bị che)');
+});
+
+$('extractClearCropBtn').addEventListener('click',()=>{
+    cropRect=null;cropImage=null;
+    $('extractCropPreview').style.display='none';
+    $('extractCopyCropBtn').style.display='none';
+    isCropping=false;
+    canvas.style.cursor='crosshair';
+    redraw();
+    showToast('Đã xoá crop');
+});
+
+function performCrop(rect){
+    if(!sourceImage||!rect)return;
+    const c=document.createElement('canvas');
+    c.width=rect.x2-rect.x1;c.height=rect.y2-rect.y1;
+    const ctx=c.getContext('2d');
+    ctx.drawImage(sourceImage,rect.x1,rect.y1,c.width,c.height,0,0,c.width,c.height);
+    cropImage=new Image();
+    cropImage.onload=()=>{
+        $('extractCropImg').src=c.toDataURL('image/png');
+        $('extractCropPreview').style.display='block';
+        $('extractCopyCropBtn').style.display='block';
+        showToast('✅ Đã crop object visible — dùng làm reference cho AI');
+    };
+    cropImage.src=c.toDataURL('image/png');
+}
+
+// SAM Integration
+let samMode=false;
+let samMaskData=null;
+
+$('extractSAMBtn').addEventListener('click',()=>{
+    if(!sourceImage)return showToast('Chọn ảnh trước');
+    samMode=!samMode;
+    if(samMode){
+        $('extractSAMBtn').classList.add('active');
+        $('extractSAMBtn').querySelector('.label-text').textContent='👆 Click vào object trên canvas (đang chờ...)';
+        canvas.style.cursor='crosshair';
+        $('extractSAMStatus').textContent='Click vào object cần tách (cloak, hair, wings...)';
+    } else {
+        $('extractSAMBtn').classList.remove('active');
+        $('extractSAMBtn').querySelector('.label-text').textContent='👆 Click vào object trên canvas';
+        canvas.style.cursor='crosshair';
+        $('extractSAMStatus').textContent='';
+    }
+});
+
+async function performSAMSegment(x,y){
+    if(!sourceImage)return;
+    $('extractSAMStatus').textContent='⏳ SAM segmenting...';
+
+    try{
+        const resp=await fetch(sourceImage.src);
+        const blob=await resp.blob();
+        const f=new FormData();
+        f.append('image',blob,'image.png');
+        f.append('x',Math.round(x));
+        f.append('y',Math.round(y));
+
+        const res=await fetch('/sam/segment',{method:'POST',body:f});
+        const data=await res.json();
+
+        if(data.error)throw Error(data.error);
+        if(!data.masks||!data.masks.length)throw Error('No mask found');
+
+        // Use first mask
+        const mask=data.masks[0];
+        samMaskData=mask;
+
+        // Show mask preview
+        $('extractSAMImg').src='data:image/png;base64,'+mask.mask_base64;
+        $('extractSAMPreview').style.display='block';
+        $('extractSAMStatus').textContent='✅ SAM mask created — dùng cho mask chính xác';
+
+        // Auto-create mask rect from SAM mask bounds
+        // We'll use the mask to guide where to draw
+        samMode=false;
+        $('extractSAMBtn').classList.remove('active');
+        $('extractSAMBtn').querySelector('.label-text').textContent='👆 Click vào object trên canvas';
+
+        showToast('✅ SAM segmented — mask sẵn sàng');
+    }catch(e){
+        $('extractSAMStatus').textContent='❌ '+e.message;
+        showToast('❌ SAM failed: '+e.message);
+    }
+}
+
+// Canvas interaction - with throttling
+canvas.addEventListener('mousedown',e=>{
+    e.stopPropagation();
+    if(!sourceImage)return;
+
+    const canvasPos=getCanvasPos(canvas,e);
+
+    // SAM mode - perform segmentation
+    if(samMode){
+        const imgPos=imgFromCanvas(canvasPos);
+        performSAMSegment(imgPos.x,imgPos.y);
+        return;
+    }
+
+    drawing=true;
+    startPoint=canvasPos;
+    lastMousePos=canvasPos;
+    if(isCropping){
+        // Cropping mode - will draw crop rect
+    } else if(activeTool==='polygon'){
+        currentPoints=[imgFromCanvas(canvasPos)];
+    }
+});
+
+canvas.addEventListener('mousemove',e=>{
+    if(!drawing||!sourceImage)return;
+    const canvasPos=getCanvasPos(canvas,e);
+    lastMousePos=canvasPos;
+
+    // For polygon: only add point if moved enough distance (10px threshold)
+    if(activeTool==='polygon'){
+        const imgPos=imgFromCanvas(canvasPos);
+        const last=currentPoints[currentPoints.length-1];
+        const dist=Math.hypot(imgPos.x-last.x,imgPos.y-last.y);
+        if(dist>10)currentPoints.push(imgPos);
+    }
+
+    // Throttle redraw - only redraw if not already pending
+    if(!redrawPending){
+        redrawPending=true;
+        requestAnimationFrame(()=>{
+            redraw();
+            redrawPending=false;
+        });
+    }
+});
+
+canvas.addEventListener('mouseup',e=>{
+    if(!drawing||!sourceImage)return;
+    drawing=false;
+    const canvasPos=getCanvasPos(canvas,e);
+    const imgStart=imgFromCanvas(startPoint);
+    const imgEnd=imgFromCanvas(canvasPos);
+
+    if(isCropping){
+        // Cropping mode - create crop rect
+        const x1=Math.min(imgStart.x,imgEnd.x),y1=Math.min(imgStart.y,imgEnd.y);
+        const x2=Math.max(imgStart.x,imgEnd.x),y2=Math.max(imgStart.y,imgEnd.y);
+        if(Math.abs(x2-x1)>10&&Math.abs(y2-y1)>10){
+            cropRect={x1,y1,x2,y2};
+            performCrop(cropRect);
+            isCropping=false;
+            canvas.style.cursor='crosshair';
+        }
+    } else if(activeTool==='rect'){
+        const x1=Math.min(imgStart.x,imgEnd.x),y1=Math.min(imgStart.y,imgEnd.y);
+        const x2=Math.max(imgStart.x,imgEnd.x),y2=Math.max(imgStart.y,imgEnd.y);
+        if(Math.abs(x2-x1)>5&&Math.abs(y2-y1)>5){
+            maskRect={x1,y1,x2,y2};
+            maskPolygon=null;
+        }
+    } else if(activeTool==='polygon'&&currentPoints.length>3){
+        maskPolygon=[...currentPoints];
+        maskRect=null;
+        currentPoints=[];
+    }
+    lastMousePos=null;
+    redraw();updatePrompt();
+});
+
+canvas.addEventListener('mouseleave',()=>{
+    if(drawing){
+        drawing=false;
+        lastMousePos=null;
+        redraw();
+    }
+});
+
+// Coordinate mapping
+function imgFromCanvas(cp){
+    if(!sourceImage)return cp;
+    return {x:cp.x*(sourceImage.width/canvas.width),y:cp.y*(sourceImage.height/canvas.height)};
+}
+
+// Drawing - using image coordinates (same as Region Select)
+function canvasFromImg(ip){
+    if(!sourceImage)return ip;
+    return {x:ip.x*(canvas.width/sourceImage.width), y:ip.y*(canvas.height/sourceImage.height)};
+}
+
+function redraw(){
+    if(!sourceImage)return;
+    const w=canvas.width,h=canvas.height;
+    const imgW=sourceImage.width,imgH=sourceImage.height;
+    const tx=(x)=>x*(w/imgW), ty=(y)=>y*(h/imgH);
+
+    ctx.clearRect(0,0,w,h);
+    ctx.drawImage(sourceImage,0,0,w,h);
+
+    // Draw crop rect (if exists)
+    if(cropRect){
+        ctx.strokeStyle='#ffcc00';ctx.lineWidth=2;ctx.setLineDash([8,4]);
+        ctx.fillStyle='rgba(255,204,0,0.1)';
+        const cx1=tx(cropRect.x1),cy1=ty(cropRect.y1),cx2=tx(cropRect.x2),cy2=ty(cropRect.y2);
+        ctx.fillRect(cx1,cy1,cx2-cx1,cy2-cy1);
+        ctx.strokeRect(cx1,cy1,cx2-cx1,cy2-cy1);
+        ctx.fillStyle='#ffcc00';ctx.font='bold 11px sans-serif';
+        ctx.fillText('VISIBLE (reference)',cx1+4,cy1+14);
+    }
+
+    // Draw crop preview while cropping
+    if(isCropping&&startPoint&&lastMousePos){
+        ctx.strokeStyle='#ffcc00';ctx.lineWidth=2;ctx.setLineDash([6,4]);
+        ctx.fillStyle='rgba(255,204,0,0.1)';
+        const x1=Math.min(startPoint.x,lastMousePos.x);
+        const y1=Math.min(startPoint.y,lastMousePos.y);
+        const x2=Math.max(startPoint.x,lastMousePos.x);
+        const y2=Math.max(startPoint.y,lastMousePos.y);
+        ctx.fillRect(x1,y1,x2-x1,y2-y1);
+        ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+    }
+
+    // Draw saved mask (using image coordinates)
+    ctx.strokeStyle='#4ecdc4';ctx.lineWidth=2;ctx.setLineDash([6,4]);
+    ctx.fillStyle='rgba(78,205,196,0.15)';
+
+    if(maskRect){
+        const x1=tx(maskRect.x1),y1=ty(maskRect.y1),x2=tx(maskRect.x2),y2=ty(maskRect.y2);
+        ctx.fillRect(x1,y1,x2-x1,y2-y1);
+        ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+    } else if(maskPolygon&&maskPolygon.length>2){
+        ctx.beginPath();ctx.moveTo(tx(maskPolygon[0].x),ty(maskPolygon[0].y));
+        for(let i=1;i<maskPolygon.length;i++)ctx.lineTo(tx(maskPolygon[i].x),ty(maskPolygon[i].y));
+        ctx.closePath();ctx.fill();ctx.stroke();
+    }
+
+    // Preview while drawing (using canvas coordinates for mouse, convert to canvas for drawing)
+    if(drawing&&startPoint&&lastMousePos){
+        ctx.strokeStyle='rgba(255,255,255,0.8)';ctx.lineWidth=2;ctx.setLineDash([6,4]);
+        ctx.fillStyle='rgba(78,205,196,0.1)';
+
+        if(activeTool==='rect'){
+            const x1=Math.min(startPoint.x,lastMousePos.x);
+            const y1=Math.min(startPoint.y,lastMousePos.y);
+            const x2=Math.max(startPoint.x,lastMousePos.x);
+            const y2=Math.max(startPoint.y,lastMousePos.y);
+            ctx.fillRect(x1,y1,x2-x1,y2-y1);
+            ctx.strokeRect(x1,y1,x2-x1,y2-y1);
+        } else if(activeTool==='polygon'&&currentPoints.length>0){
+            const pts=currentPoints.map(p=>canvasFromImg(p));
+            ctx.beginPath();ctx.moveTo(pts[0].x,pts[0].y);
+            for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i].x,pts[i].y);
+            ctx.lineTo(lastMousePos.x,lastMousePos.y);
+            ctx.stroke();
+        }
+    }
+    ctx.setLineDash([]);
+}
+
+// Generate prompt
+function updatePrompt(){
+    if(!sourceImage||(!maskRect&&!maskPolygon)){
+        promptOutput.textContent='Khoanh vùng object để tạo prompt';
+        return;
+    }
+
+    const objType=objectType.value;
+    const objName=objType==='custom'?customObjectInput.value.trim()||'object':objectNames[objType];
+    const editDesc=$('extractEditDesc').value.trim();
+    const isTransparent=transparentCb.checked;
+    const isKeepStyle=keepStyleCb.checked;
+
+    const lines=[
+        '═══════════════════════════════════════════════════════',
+        '⚠️ EXTEND ONLY THE OBJECT — DO NOT REDRAW CHARACTER:',
+        '═══════════════════════════════════════════════════════',
+        '',
+        cropImage ? 'YOU RECEIVED 3 IMAGES:' : 'YOU RECEIVED 2 IMAGES:',
+        '① Original image — full scene',
+        '② Masked image — cyan area shows where to extend the object',
+        cropImage ? '③ Reference crop — visible part of the object (use as style/texture reference)' : '',
+        '',
+        'TASK:',
+        `Extend only the ${objName} object.`,
+        `The ${objName} is a SEPARATE SUBJECT from the body.`,
+        editDesc ? `Specifically: ${editDesc}` : '',
+        '',
+        'CRITICAL:',
+        `- The ${objName} is NOT part of the body, face, arms, or armor.`,
+        `- Use the visible ${objName} as the ONLY reference.`,
+        `- Continue the same ${objName} behind the occluder.`,
+        `- Do NOT redraw the character, body, face, arms, or other elements.`,
+        '',
+        'INSTRUCTIONS:',
+        `Continue the same ${objName} with:`,
+        '- Identical color, trim pattern, fold direction',
+        '- Identical line style, texture, detail level',
+        '- The result must look like the same object continues naturally',
+        '',
+        isKeepStyle ? 'STYLE: Match visible part exactly. Do not improve, simplify, or redesign.' : '',
+        '',
+        '═══════════════════════════════════════════════════════',
+        '',
+        'OUTPUT:',
+        isTransparent ? `- Extended ${objName} on transparent background` : `- Extended ${objName} on original background`,
+        '- Original dimensions, no watermarks',
+    ];
+
+    promptOutput.textContent=lines.filter(l=>l!==undefined).join('\n');
+}
+
+// Copy functions
+$('extractCopyOrigBtn').addEventListener('click',async()=>{
+    if(!sourceImage)return showToast('Chọn ảnh trước');
+    const btn=$('extractCopyOrigBtn');btn.classList.add('loading');btn.disabled=true;
+    try{
+        const r=await fetch(sourceImage.src);const blob=await r.blob();
+        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        showToast('✅ Đã copy ① ảnh gốc!');
+    }catch(e){showToast('❌ '+e.message)}
+    finally{btn.classList.remove('loading');btn.disabled=false}
+});
+
+$('extractCopyMaskBtn').addEventListener('click',async()=>{
+    if(!sourceImage||(!maskRect&&!maskPolygon))return showToast('Khoanh vùng trước');
+    const btn=$('extractCopyMaskBtn');btn.classList.add('loading');btn.disabled=true;
+    try{
+        // Create image with mask overlay
+        const c=document.createElement('canvas');
+        c.width=sourceImage.width;c.height=sourceImage.height;
+        const ctx=c.getContext('2d');
+        ctx.drawImage(sourceImage,0,0);
+
+        // Draw crop rect if exists
+        if(cropRect){
+            ctx.strokeStyle='#ffcc00';ctx.lineWidth=3;ctx.setLineDash([8,4]);
+            ctx.fillStyle='rgba(255,204,0,0.15)';
+            ctx.fillRect(cropRect.x1,cropRect.y1,cropRect.x2-cropRect.x1,cropRect.y2-cropRect.y1);
+            ctx.strokeRect(cropRect.x1,cropRect.y1,cropRect.x2-cropRect.x1,cropRect.y2-cropRect.y1);
+        }
+
+        // Draw mask
+        ctx.strokeStyle='#4ecdc4';ctx.lineWidth=3;ctx.setLineDash([8,4]);
+        ctx.fillStyle='rgba(78,205,196,0.2)';
+
+        if(maskRect){
+            ctx.fillRect(maskRect.x1,maskRect.y1,maskRect.x2-maskRect.x1,maskRect.y2-maskRect.y1);
+            ctx.strokeRect(maskRect.x1,maskRect.y1,maskRect.x2-maskRect.x1,maskRect.y2-maskRect.y1);
+        } else if(maskPolygon){
+            ctx.beginPath();ctx.moveTo(maskPolygon[0].x,maskPolygon[0].y);
+            for(let i=1;i<maskPolygon.length;i++)ctx.lineTo(maskPolygon[i].x,maskPolygon[i].y);
+            ctx.closePath();ctx.fill();ctx.stroke();
+        }
+        ctx.setLineDash([]);
+
+        const blob=await new Promise(r=>c.toBlob(b=>r(b),'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        showToast('✅ Đã copy ② ảnh mask!');
+    }catch(e){showToast('❌ '+e.message)}
+    finally{btn.classList.remove('loading');btn.disabled=false}
+});
+
+$('extractCopyCropBtn').addEventListener('click',async()=>{
+    if(!cropImage)return showToast('Crop object visible trước');
+    const btn=$('extractCopyCropBtn');btn.classList.add('loading');btn.disabled=true;
+    try{
+        const c=document.createElement('canvas');
+        c.width=cropImage.width;c.height=cropImage.height;
+        c.getContext('2d').drawImage(cropImage,0,0);
+        const blob=await new Promise(r=>c.toBlob(b=>r(b),'image/png'));
+        await navigator.clipboard.write([new ClipboardItem({'image/png':blob})]);
+        showToast('✅ Đã copy ③ reference crop!');
+    }catch(e){showToast('❌ '+e.message)}
+    finally{btn.classList.remove('loading');btn.disabled=false}
+});
+
+$('extractCopyPromptBtn').addEventListener('click',()=>{
+    const text=promptOutput.textContent;
+    if(!text||text==='Khoanh vùng object để tạo prompt')return showToast('Khoanh vùng trước');
+    navigator.clipboard.writeText(text).then(()=>showToast('📋 Đã copy ④ prompt!')).catch(()=>showToast('❌ Copy failed'));
+});
+
+// Init
+transparentCb.addEventListener('change',updatePrompt);
+keepStyleCb.addEventListener('change',updatePrompt);
+$('extractEditDesc').addEventListener('input',updatePrompt);
+window.addEventListener('resize',()=>{resizeCanvas();redraw()});
+console.log('✂️ Object Edit tab ready');
+})();
+
+// ═══════════════════════════════════════════════════════════════
+//  TAB 5 — SEE-THROUGH (Body Parts + SAM Click + Inpaint)
 // ═══════════════════════════════════════════════════════════════
 (function(){
 const canvas=$('stCanvas'),ctx=canvas.getContext('2d');
