@@ -7,7 +7,7 @@ for _hf_var in ('HF_HOME', 'HUGGINGFACE_HUB_CACHE'):
     if not os.environ.get(_hf_var):
         # Auto-detect best drive for cache
         for _drive in ('E:', 'D:', 'C:'):
-            if os.path.exists(f'{_drive}\\"):
+            if os.path.exists(_drive + os.sep):
                 os.environ[_hf_var] = f'{_drive}/huggingface_cache/hub' if 'CACHE' in _hf_var else f'{_drive}/huggingface_cache'
                 break
         os.makedirs(os.environ[_hf_var], exist_ok=True)

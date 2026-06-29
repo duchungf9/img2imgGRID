@@ -19,7 +19,7 @@ from PIL import Image
 for _v in ('HF_HOME', 'HUGGINGFACE_HUB_CACHE'):
     if not os.environ.get(_v):
         for _d in ('E:', 'D:', 'C:'):
-            if os.path.exists(f'{_d}\\"):
+            if os.path.exists(_d + os.sep):
                 os.environ[_v] = f'{_d}/huggingface_cache' if 'HOME' in _v else f'{_d}/huggingface_cache/hub'
                 break
 os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
@@ -146,14 +146,18 @@ def inpaint(
     """
     t0 = time.time()
 
-    # ── Try Flux first, fall back to SD ──
-    try:
-        pipe = _load_flux_fill()
-        use_flux = True
-    except Exception as e:
-        print(f'[Inpaint] Flux unavailable, using SD fallback: {e}')
+    # ── Auto-detect: Flux only if enough VRAM (>=16GB), else SD 1.5 ──
+    vram = _get_vram_gb()
+    use_flux = False
+    if vram >= 16:
+        try:
+            pipe = _load_flux_fill()
+            use_flux = True
+        except Exception as e:
+            print(f'[Inpaint] Flux unavailable: {e}')
+
+    if not use_flux:
         pipe = _load_sd_inpaint()
-        use_flux = False
 
     if use_flux:
         model_label = 'Flux Fill'
