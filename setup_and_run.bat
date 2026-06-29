@@ -1,11 +1,22 @@
 @echo off
 chcp 65001 >nul
-title img2imgGRID
+title grid-app (Region Select + Flux AI)
 
 echo =============================================
-echo  img2imgGRID - Setup & Run
+echo  grid-app - Setup and Run
+echo  (Region Select + SAM + Inpainting + Flux AI)
 echo =============================================
 echo.
+
+:: ─── Drive selection ───
+set "CACHE_DRIVE=E:"
+if not exist "%CACHE_DRIVE%\" (
+    echo [!] O %CACHE_DRIVE% khong ton tai, dung C:
+    set "CACHE_DRIVE=C:"
+)
+set "HF_HOME=%CACHE_DRIVE%\huggingface_cache"
+mkdir "%HF_HOME%\hub" 2>nul
+echo [OK] HF cache: %HF_HOME%
 
 :: ─── Check Python ───
 where python >nul 2>&1
@@ -14,7 +25,6 @@ if %ERRORLEVEL% neq 0 (
     pause
     exit /b 1
 )
-
 echo [OK] Python:
 python --version
 
@@ -51,7 +61,6 @@ if %ERRORLEVEL% neq 0 (
         echo [OK] PyTorch + CUDA da cai xong
     )
 ) else (
-    :: PyTorch da co, kiem tra CUDA
     venv\Scripts\python.exe -c "import torch; assert torch.cuda.is_available()" 2>nul
     if %ERRORLEVEL% neq 0 (
         echo [OK] PyTorch co (CPU mode)
@@ -64,25 +73,58 @@ if %ERRORLEVEL% neq 0 (
 echo [*] Cai dat thu vien...
 venv\Scripts\pip.exe install -r requirements.txt --quiet
 
-:: ─── Kiểm tra model see-through ───
+:: ─── Kiem tra model see-through ───
 if not exist "models\see_through\checkpoint-18000.pt" (
     echo.
     echo === See-Through Model ===
     echo Model body parts (1.2GB) chua co.
-    echo Ban muon tai xuong de dung duoc See-Through tab?
-    echo [1] Co, tai xuong (khuyen nghi neu co GPU)
-    echo [2] Khong, de sau (van dung duoc SAM + Inpaint)
-    choice /c 12 /n /m "Chon 1 hoac 2: "
-    if errorlevel 2 (
-        echo [*] Bo qua. Khi nao muon tai, chay: huggingface-cli download 24yearsold/l2d_sam_iter2 checkpoint-18000.pt
-    ) else (
-        echo [*] Dang tai model (1.2GB)...
+    echo Ban muon tai xuong? [1=Co / 2=De sau]
+    choice /c 12 /n /m "Chon: "
+    if not errorlevel 2 (
+        echo [*] Dang tai model...
         mkdir models\see_through 2>nul
         venv\Scripts\python.exe -c "from huggingface_hub import hf_hub_download; hf_hub_download('24yearsold/l2d_sam_iter2', 'checkpoint-18000.pt', local_dir='models/see_through', local_dir_use_symlinks=False)"
         echo [OK] Model da tai xong!
     )
     echo.
 )
+
+:: ─── Flux AI Model (optional, ~22GB) ───
+echo.
+echo === Flux AI Inpainting Model ===
+echo FLUX.1-Fill-dev (~22GB) - Chay local, sieu nhanh (2-3s)
+echo Yeu cau: HuggingFace token + da accept license
+echo License: https://huggingface.co/black-forest-labs/FLUX.1-Fill-dev
+echo.
+echo Ban muon tai Flux model? [1=Co / 2=De sau]
+choice /c 12 /n /m "Chon: "
+if not errorlevel 2 (
+    echo.
+    echo Nhap HuggingFace token cua ban:
+    echo (Lay tai: https://huggingface.co/settings/tokens)
+    set /p "HF_TOKEN=Token: "
+    if not "%HF_TOKEN%"=="" (
+        echo [*] Dang tai FLUX.1-Fill-dev (~22GB, se lau)...
+        set "HF_HOME=%HF_HOME%"
+        set "HF_TOKEN=%HF_TOKEN%"
+        venv\Scripts\python.exe -c ^
+            "import os; os.environ['HF_TOKEN']='%HF_TOKEN%'; os.environ['HF_HOME']='%HF_HOME%';^
+             from huggingface_hub import hf_hub_download;^
+             files=['ae.safetensors','flux1-fill-dev.safetensors','model_index.json'];^
+             for f in files:^
+                 try:^
+                     print(f'Downloading {f}...');^
+                     hf_hub_download('black-forest-labs/FLUX.1-Fill-dev', f, cache_dir='%HF_HOME%/hub');^
+                     print(f'  OK');^
+                 except Exception as e:^
+                     print(f'  Loi: {e}')"
+        echo.
+        echo [OK] Flux model da tai xong!
+    ) else (
+        echo [!] Bo qua (token rong)
+    )
+)
+echo.
 
 :: ─── Run ───
 echo.
@@ -92,6 +134,7 @@ echo  Mo trinh duyet: http://localhost:5000
 echo =============================================
 echo.
 
+set HF_HOME=%HF_HOME%
 start http://localhost:5000
 venv\Scripts\python.exe app.py
 

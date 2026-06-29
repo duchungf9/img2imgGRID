@@ -1,6 +1,36 @@
+import sys, io, math, os, json
+
+# ── Force UTF-8 for stdout/stderr (fix 'charmap' error with Vietnamese) ──
+os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
+# ── Use E: drive for HF cache (C: only has 1GB free) ──
+for _hf_var in ('HF_HOME', 'HUGGINGFACE_HUB_CACHE'):
+    if not os.environ.get(_hf_var):
+        # Auto-detect best drive for cache
+        for _drive in ('E:', 'D:', 'C:'):
+            if os.path.exists(f'{_drive}\\"):
+                os.environ[_hf_var] = f'{_drive}/huggingface_cache/hub' if 'CACHE' in _hf_var else f'{_drive}/huggingface_cache'
+                break
+        os.makedirs(os.environ[_hf_var], exist_ok=True)
+if hasattr(sys.stdout, 'reconfigure'):
+    try:
+        sys.stdout.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+if hasattr(sys.stderr, 'reconfigure'):
+    try:
+        sys.stderr.reconfigure(encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+# Fallback: wrap stdout/stderr if reconfigure didn't stick
+if sys.stdout.encoding and sys.stdout.encoding.lower() in ('cp1252', 'ansi_x3.4-1968'):
+    try:
+        sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8', errors='replace')
+        sys.stderr = io.TextIOWrapper(sys.stderr.buffer, encoding='utf-8', errors='replace')
+    except Exception:
+        pass
+
 from flask import Flask, render_template, request, send_file, jsonify
 from PIL import Image, ImageDraw, ImageFont
-import io, math, os, json
 
 app = Flask(__name__)
 UPLOAD_FOLDER = 'static/uploads'
@@ -229,6 +259,37 @@ def sam_inpaint():
         return {'error': str(e)}, 500
 
 
+@app.route('/flux/inpaint', methods=['POST'])
+def flux_inpaint():
+    """
+    Prompt-guided inpainting endpoint.
+    Accepts an image + binary mask + prompt, returns full inpainted image.
+    """
+    if 'image' not in request.files:
+        return {'error': 'No image'}, 400
+    if 'mask' not in request.files:
+        return {'error': 'No mask'}, 400
+    img = Image.open(request.files['image'].stream).convert('RGB')
+    mask = Image.open(request.files['mask'].stream).convert('L')
+    prompt = request.form.get('prompt', '').strip()
+    if not prompt:
+        return {'error': 'No prompt provided'}, 400
+
+    try:
+        from inpaint_flux import inpaint as inpaint_fn
+        steps = int(request.form.get('steps', 20))
+        result = inpaint_fn(img, mask, prompt, num_steps=steps)
+        buf = io.BytesIO()
+        result.save(buf, format='PNG')
+        return send_file(io.BytesIO(buf.getvalue()), mimetype='image/png')
+    except ImportError as e:
+        return {'error': f'Missing packages: {e}'}, 500
+    except RuntimeError as e:
+        return {'error': f'Model error: {e}'}, 500
+    except Exception as e:
+        return {'error': str(e)}, 500
+
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -274,4 +335,4 @@ def draw_grid():
 
 
 if __name__ == '__main__':
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=False, host='0.0.0.0', port=5000)

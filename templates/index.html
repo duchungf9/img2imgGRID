@@ -357,6 +357,35 @@ header span{color:#7c7c9a;font-size:12px}
             </div>
         </div>
 
+        <!-- ═══ Local Generation (SD Inpainting) ═══ -->
+        <div class="section" style="border:1px solid #4ecdc433;background:#0a1a1a;">
+            <h2>🚀 AI Generate (Local — SD Inpainting)</h2>
+            <div class="form-group">
+                <textarea id="genPrompt" rows="2" placeholder="Mô tả chi tiết nội dung muốn tạo trong vùng đã khoanh...
+VD: thay áo giáp thành màu vàng gold, thêm họa tiết rồng
+     hoặc: đổi màu tóc thành đỏ, mắt thành xanh dương"></textarea>
+            </div>
+            <div style="display:flex;gap:4px;align-items:center;flex-wrap:wrap;">
+                <button class="btn-primary" id="generateBtn" style="flex:1;">
+                    <span class="spinner"></span>
+                    <span class="label-text">🚀 Generate</span>
+                </button>
+                <div style="display:flex;gap:4px;">
+                    <button class="btn-sm" id="genKeepBtn" style="display:none;background:#2ecc71;color:#fff;">✅ Keep</button>
+                    <button class="btn-sm" id="genRevertBtn" style="display:none;background:#e74c3c;color:#fff;">↩️ Revert</button>
+                </div>
+            </div>
+            <div id="genStatus" style="font-size:10px;color:#666;margin-top:4px;"></div>
+            <div id="genProgressBar" style="display:none;margin-top:6px;height:4px;background:#1a1a2e;border-radius:3px;overflow:hidden;">
+                <div id="genProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#4ecdc4,#44b3ab);border-radius:3px;transition:width 1s;"></div>
+            </div>
+            <div id="genProgressElapsed" style="display:none;font-size:10px;color:#888;margin-top:2px;text-align:right;"></div>
+            <div style="font-size:10px;color:#888;margin-top:6px;padding:6px;background:#0f0f13;border-radius:6px;border:1px solid #1e1e2e;">
+                💡 <strong>Hướng dẫn:</strong> Vẽ region → gõ mô tả → bấm Generate. Flux AI chạy local
+                (RTX 3060 ~2-3s), chỉ thay đổi vùng bạn khoanh, giữ nguyên phần còn lại. Lần đầu sẽ tải model (~22GB).
+            </div>
+        </div>
+
         <!-- Copy buttons for each image -->
         <div class="section">
             <h2>📋 Copy từng ảnh</h2>
@@ -687,6 +716,7 @@ function loadFile(file){
     r.readAsDataURL(file);
 }
 
+function resizeCanvas(){window.resizeGridCanvas&&window.resizeGridCanvas()}
 window.resizeGridCanvas=function(){
     if(!sourceImage)return;
     const rect=drop.getBoundingClientRect();
@@ -1389,12 +1419,17 @@ function drawRegions(c,w,h){
     }
 }
 
+// ── Generation state ──
+let generatedResult=null;   // Image of generated result
+let showGenerated=false;    // true = show generated image on canvas
+
 function redraw(){
     if(!sourceImage)return;
     const w=canvas.width,h=canvas.height;
     ctx.clearRect(0,0,w,h);
-    ctx.drawImage(sourceImage,0,0,w,h);
-    drawRegions(ctx,w,h);
+    const img=(showGenerated&&generatedResult)?generatedResult:sourceImage;
+    ctx.drawImage(img,0,0,w,h);
+    if(!showGenerated) drawRegions(ctx,w,h);
 }
 
 // Second mousemove handler removed - using throttled version above
@@ -1609,6 +1644,83 @@ $('exportMaskBtn').addEventListener('click',()=>{
 });
 $('exportAllMasksBtn').addEventListener('click',exportAllMasks);
 $('exportSpriteBtn').addEventListener('click',exportSpriteSheet);
+
+// ── Local Generation (Flux AI) ──
+function createCombinedMask(){
+    // Create binary mask from all non-'preserve' regions
+    const c=document.createElement('canvas');
+    c.width=sourceImage.width;c.height=sourceImage.height;
+    const ctx=c.getContext('2d');
+    ctx.fillStyle='#000';ctx.fillRect(0,0,c.width,c.height);
+    ctx.fillStyle='#fff';ctx.strokeStyle='#fff';
+    for(const r of regions){
+        if(r.mode==='preserve')continue;
+        if(r.type==='rectangle'){const d=r.data;ctx.fillRect(d.x1,d.y1,d.x2-d.x1,d.y2-d.y1)}
+        else if(r.type==='ellipse'){const d=r.data;ctx.beginPath();ctx.ellipse(d.cx,d.cy,d.rx,d.ry,0,0,Math.PI*2);ctx.fill()}
+        else if(r.type==='polygon'){const pts=r.data.points;if(pts.length>=3){ctx.beginPath();ctx.moveTo(pts[0][0],pts[0][1]);for(let i=1;i<pts.length;i++)ctx.lineTo(pts[i][0],pts[i][1]);ctx.closePath();ctx.fill()}}
+    }
+    return new Promise(resolve=>c.toBlob(b=>resolve(b),'image/png'));
+}
+
+$('generateBtn').addEventListener('click',async()=>{
+    if(!sourceImage)return showToast('Vui lòng chọn ảnh trước');
+    if(!regions.length)return showToast('Chưa có region nào');
+    const prompt=$('genPrompt').value.trim();
+    if(!prompt)return showToast('Nhập mô tả cho vùng muốn tạo');
+    const btn=$('generateBtn'),status=$('genStatus'),bar=$('genProgressBar'),fill=$('genProgressFill'),elapsed=$('genProgressElapsed');
+    btn.classList.add('loading');btn.disabled=true;
+    bar.style.display='block';elapsed.style.display='block';
+    // Animated progress bar + timer
+    let startTime=Date.now(), timer=setInterval(()=>{
+        const sec=Math.round((Date.now()-startTime)/1000);
+        status.textContent=`⏳ Đang xử lý... (${sec}s)`;
+        elapsed.textContent=`⏱ ${sec}s`;
+        // Fake progress animation: slows down over time (sqrt curve)
+        const pct=Math.min(85, Math.sqrt(sec/20)*85);
+        fill.style.width=pct+'%';
+    },500);
+    try{
+        status.textContent='⏳ Đang tạo mask...';
+        const maskBlob=await createCombinedMask();
+        const origBlob=await fetchOriginalBlob();
+        elapsed.textContent='⏳ AI Inpainting...';
+        status.textContent='⏳ AI Inpainting đang chạy...';
+        const f=new FormData();f.append('image',origBlob,'image.png');f.append('mask',maskBlob,'mask.png');f.append('prompt',prompt);
+        const res=await fetch('/flux/inpaint',{method:'POST',body:f});
+        if(!res.ok){const err=await res.json().catch(()=>({error:res.statusText}));throw Error(err.error||'Server error')}
+        fill.style.width='95%';
+        const resultBlob=await res.blob();
+        const img=new Image();
+        await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('Failed to decode'));img.src=URL.createObjectURL(resultBlob)});
+        generatedResult=img;showGenerated=true;redraw();
+        $('genKeepBtn').style.display='';$('genRevertBtn').style.display='';
+        const sec=Math.round((Date.now()-startTime)/1000);
+        fill.style.width='100%';
+        status.textContent=`✅ Xong! (${sec}s) — Nếu ưng bấm "Keep", không thì chỉnh prompt Generate lại.`;
+        elapsed.textContent=`✅ ${sec}s`;
+        setTimeout(()=>{bar.style.display='none';elapsed.style.display='none'},5000);
+        showToast(`✅ Xong! (${sec}s)`);
+    }catch(e){
+        bar.style.display='none';elapsed.style.display='none';
+        status.textContent='❌ '+e.message;showToast('❌ '+e.message);console.error('[Gen]',e);
+    }
+    finally{clearInterval(timer);btn.classList.remove('loading');btn.disabled=false}
+});
+
+$('genKeepBtn').addEventListener('click',()=>{
+    if(!generatedResult)return;
+    sourceImage=generatedResult;generatedResult=null;showGenerated=false;
+    $('genKeepBtn').style.display='none';$('genRevertBtn').style.display='none';
+    $('genStatus').textContent='✅ Kết quả đã lưu. Vẽ region mới để tiếp tục chỉnh sửa.';
+    redraw();showToast('✅ Applied!');
+});
+
+$('genRevertBtn').addEventListener('click',()=>{
+    generatedResult=null;showGenerated=false;
+    $('genKeepBtn').style.display='none';$('genRevertBtn').style.display='none';
+    $('genStatus').textContent='↩️ Đã revert về ảnh gốc.';
+    redraw();showToast('↩️ Reverted');
+});
 
 // ── Init ──
 $('imageStyle').addEventListener('input', updatePrompt);
