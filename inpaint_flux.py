@@ -77,6 +77,16 @@ def _load_flux_fill():
             )
 
 
+def _get_vram_gb():
+    """Detect available VRAM in GB (rounded). Returns 0 if unknown/CPU."""
+    if not torch.cuda.is_available():
+        return 0
+    try:
+        return torch.cuda.get_device_properties(0).total_memory / 1e9
+    except Exception:
+        return 0
+
+
 def _load_sd_inpaint():
     """Fallback: SD 1.5 Inpainting (no auth required, open weights)."""
     global _sd_pipe, _device
@@ -84,7 +94,8 @@ def _load_sd_inpaint():
         return _sd_pipe
 
     _device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(f'[Inpaint] Loading SD 1.5 fallback on {_device}...')
+    vram = _get_vram_gb()
+    print(f'[Inpaint] Loading SD 1.5 fallback on {_device} (VRAM: {vram:.0f}GB)')
 
     from diffusers import AutoPipelineForInpainting
     pipe = AutoPipelineForInpainting.from_pretrained(
@@ -95,6 +106,10 @@ def _load_sd_inpaint():
     )
     pipe.to(_device)
     pipe.enable_attention_slicing()
+    # Use CPU offload on low-VRAM cards (<6GB like GTX 1650)
+    if vram < 6:
+        pipe.enable_model_cpu_offload()
+        print(f'[Inpaint] Low VRAM mode: CPU offload enabled')
     _sd_pipe = pipe
     print(f'[Inpaint] SD 1.5 fallback ready on {_device}')
     return _sd_pipe
@@ -160,7 +175,8 @@ def inpaint(
     w, h = image.size
 
     # ── Scale down huge images to avoid OOM on 12GB VRAM ──
-    MAX_PX = 1024 if use_flux else 768
+    vram = _get_vram_gb()
+    MAX_PX = 512 if (vram and vram < 6) else (1024 if use_flux else 768)
     scale = min(MAX_PX / w, MAX_PX / h, 1.0)
     needs_resize = scale < 1.0
     if needs_resize:
