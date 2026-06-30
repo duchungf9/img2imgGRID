@@ -232,11 +232,11 @@ header span{color:#7c7c9a;font-size:12px}
             <div class="file-label" id="regionFileLabel" style="display:none;"></div>
             <input type="file" id="regionFileInput" accept="image/*" style="display:none"/>
             <!-- Before/After comparison slider -->
-            <div id="compareWrap" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:10;cursor:ew-resize;overflow:hidden;border-radius:8px;">
-                <div id="compareAfter" style="position:absolute;top:0;left:0;width:100%;height:100%;"><img id="compareAfterImg" style="width:100%;height:100%;object-fit:contain"></div>
-                <div id="compareBefore" style="position:absolute;top:0;left:0;width:50%;height:100%;overflow:hidden;"><img id="compareBeforeImg" style="width:100%;height:100%;object-fit:contain;position:absolute;top:0;left:0;"></div>
-                <div id="compareHandle" style="position:absolute;top:0;left:50%;width:3px;height:100%;background:#4ecdc4;box-shadow:0 0 8px #4ecdc4;"></div>
-                <div id="compareLabel" style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font-size:10px;padding:3px 8px;background:#000000aa;border-radius:4px;color:#fff;pointer-events:none">◀ Trước | Sau ▶</div>
+            <div id="compareWrap" style="display:none;position:absolute;top:0;left:0;z-index:10;cursor:ew-resize;overflow:hidden;border-radius:8px;">
+                <img id="compareAfterImg" style="position:absolute;top:0;left:0;display:block;pointer-events:none;">
+                <div id="compareBefore" style="position:absolute;top:0;left:0;width:50%;overflow:hidden;pointer-events:none;"><img id="compareBeforeImg" style="display:block;position:absolute;top:0;left:0;pointer-events:none;"></div>
+                <div id="compareHandle" style="position:absolute;top:0;left:50%;width:3px;height:100%;background:#4ecdc4;box-shadow:0 0 8px #4ecdc4;z-index:2;"></div>
+                <div style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font-size:10px;padding:3px 8px;background:#000000aa;border-radius:4px;color:#fff;pointer-events:none;white-space:nowrap;z-index:2;">◀ Trước | Sau ▶</div>
             </div>
         </div>
     </div>
@@ -1730,14 +1730,23 @@ $('generateBtn').addEventListener('click',async()=>{
         generatedResult=img;showGenerated=true;
         // Show comparison slider overlay on top of canvas (don't hide canvas)
         const cw=$('compareWrap'),cs=$('regionCanvas');
-        $('compareBeforeImg').src=sourceImage.src;
-        $('compareAfterImg').src=img.src;
-        // Position overlay to match canvas rectangle
         const cr=cs.getBoundingClientRect();
-        const dz=cs.parentElement;
-        cw.style.position='absolute';
-        cw.style.top='0';cw.style.left='0';
-        cw.style.width=cr.width+'px';cw.style.height=cr.height+'px';
+        // Set both images to exact canvas pixel dimensions (no scaling)
+        const bi=$('compareBeforeImg'), ai=$('compareAfterImg');
+        bi.src=sourceImage.src; ai.src=img.src;
+        bi.onload=ai.onload=()=>{
+            bi.style.width=cr.width+'px'; bi.style.height=cr.height+'px';
+            ai.style.width=cr.width+'px'; ai.style.height=cr.height+'px';
+            cw.style.width=cr.width+'px'; cw.style.height=cr.height+'px';
+            $('compareBefore').style.height=cr.height+'px';
+        };
+        // If already loaded, set sizes directly
+        if(bi.complete && ai.complete){
+            bi.style.width=cr.width+'px'; bi.style.height=cr.height+'px';
+            ai.style.width=cr.width+'px'; ai.style.height=cr.height+'px';
+            cw.style.width=cr.width+'px'; cw.style.height=cr.height+'px';
+            $('compareBefore').style.height=cr.height+'px';
+        }
         cw.style.display='block';
         $('genKeepBtn').style.display='';$('genRevertBtn').style.display='';
         const sec=Math.round((Date.now()-startTime)/1000);
