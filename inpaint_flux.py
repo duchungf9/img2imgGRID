@@ -305,6 +305,17 @@ def inpaint(
             strength=strength,  # <1.0 = preserve more original content
         ).images[0]
 
+    # ── Compositing: strength <0.5 = ADD effect, not REPLACE ──
+    if strength < 0.5 and not use_flux:
+        cv2_img = np.array(image_small.convert('RGB')).astype(np.float32)
+        cv2_res = np.array(result.convert('RGB')).astype(np.float32)
+        cv2_mask = np.array(mask_small.convert('L'), dtype=np.float32) / 255.0
+        cv2_mask = cv2_mask[:,:,np.newaxis]
+        # Screen blend: orig + result*mask*0.7 → keep orig, add effect on top
+        blended = cv2_img + (cv2_res - cv2_img) * cv2_mask * 0.7
+        result = Image.fromarray(np.clip(blended, 0, 255).astype(np.uint8))
+        print(f'[Inpaint] Composited (add effect mode)')
+
     # Restore original size
     if needs_resize:
         result = result.resize((w, h), Image.LANCZOS)
