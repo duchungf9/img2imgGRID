@@ -307,14 +307,29 @@ def inpaint(
 
     # ── Compositing: strength <0.5 = ADD effect, not REPLACE ──
     if strength < 0.5 and not use_flux:
-        cv2_img = np.array(image_small.convert('RGB')).astype(np.float32)
-        cv2_res = np.array(result.convert('RGB')).astype(np.float32)
-        cv2_mask = np.array(mask_small.convert('L'), dtype=np.float32) / 255.0
-        cv2_mask = cv2_mask[:,:,np.newaxis]
-        # Screen blend: orig + result*mask*0.7 → keep orig, add effect on top
-        blended = cv2_img + (cv2_res - cv2_img) * cv2_mask * 0.7
+        # 1) Paint masked area BLACK, 2) inpaint with full strength
+        # 3) Screen-blend only the new pixels onto original
+        img_np = np.array(image_small.convert('RGB'))
+        mask_np2 = np.array(mask_small.convert('L'), dtype=np.uint8)
+        img_black = img_np.copy()
+        img_black[mask_np2 > 30] = [0, 0, 0]
+        img_black_pil = Image.fromarray(img_black)
+        with torch.no_grad():
+            fx = pipe(
+                prompt=prompt,
+                image=img_black_pil,
+                mask_image=mask_small,
+                height=new_h, width=new_w,
+                guidance_scale=gs, num_inference_steps=steps,
+                strength=0.99,
+            ).images[0]
+        fx_np = np.array(fx.convert('RGB')).astype(np.float32)
+        orig_np = img_np.astype(np.float32)
+        mask_f = mask_np2.astype(np.float32)[:,:,np.newaxis] / 255.0
+        # Screen blend: orig + fire*mask*0.8
+        blended = orig_np + (fx_np - orig_np) * mask_f * 0.8
         result = Image.fromarray(np.clip(blended, 0, 255).astype(np.uint8))
-        print(f'[Inpaint] Composited (add effect mode)')
+        print(f'[Inpaint] Add-effect mode: fire generated on black bg, composited')
 
     # Restore original size
     if needs_resize:
