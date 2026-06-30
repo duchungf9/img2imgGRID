@@ -205,8 +205,8 @@ def inpaint(
         steps = min(num_steps, 4)  # Flux schnell: 1-4 steps
     else:
         model_label = 'SD 1.5 Inpaint'
-        gs = 7.0          # lower CFG = more faithful to original
-        steps = 25         # more steps = better quality
+        gs = 7.5
+        steps = 50
 
     # Normalise inputs
     if image.mode == 'RGBA':
