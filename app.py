@@ -8,7 +8,7 @@ if os.path.exists(_env_path):
             _line = _line.strip()
             if _line and not _line.startswith('#'):
                 _k, _v = _line.split('=', 1)
-                os.environ.setdefault(_k.strip(), _v.strip())
+                os.environ[_k.strip()] = _v.strip()  # force set
 
 # ── Force UTF-8 for stdout/stderr (fix 'charmap' error with Vietnamese) ──
 os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
