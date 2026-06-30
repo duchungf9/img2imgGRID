@@ -8,15 +8,11 @@ echo  (Region Select + SAM + Inpainting)
 echo =============================================
 echo.
 
-:: ─── Set HuggingFace cache to E: drive ───
+:: ─── Set HuggingFace cache + doc token tu .env (app.py tu dong lam) ───
 set "HF_HOME=E:\huggingface_cache"
 set "HUGGINGFACE_HUB_CACHE=E:\huggingface_cache\hub"
-:: Doc token tu .env file
-if exist ".env" (
-    for /f "tokens=*" %%a in ('findstr /b "HF_TOKEN" .env') do set "%%a"
-)
 mkdir "%HF_HOME%\hub" 2>nul
-echo [OK] HF cache: %HF_HOME%
+echo [OK] HF cache: %HF_HOME% (app.py tu dong doc .env)
 
 :: ─── Check Python ───
 where python >nul 2>&1

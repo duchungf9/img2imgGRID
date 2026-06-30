@@ -7,8 +7,16 @@ if os.path.exists(_env_path):
         for _line in _f:
             _line = _line.strip()
             if _line and not _line.startswith('#'):
-                _k, _v = _line.split('=', 1)
-                os.environ[_k.strip()] = _v.strip()  # force set
+                _eq = _line.find('=')
+                if _eq > 0:
+                    _k = _line[:_eq].strip()
+                    _v = _line[_eq+1:].strip()
+                    os.environ[_k] = _v
+    _token = os.environ.get('HF_TOKEN', '')
+    if _token:
+        print(f'[.env] Loaded HF_TOKEN (starts with {_token[:8]}...)')
+    else:
+        print('[.env] File found but no HF_TOKEN')
 
 # ── Force UTF-8 for stdout/stderr (fix 'charmap' error with Vietnamese) ──
 os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
