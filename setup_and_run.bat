@@ -11,6 +11,15 @@ echo.
 :: ─── Set HuggingFace cache to E: drive ───
 set "HF_HOME=E:\huggingface_cache"
 set "HUGGINGFACE_HUB_CACHE=E:\huggingface_cache\hub"
+:: Check if HF_TOKEN is set, if not prompt for it
+if "%HF_TOKEN%"=="" (
+    if exist "%HF_HOME%\hub\models--black-forest-labs--FLUX.1-Fill-dev" (
+        echo [OK] Flux model da co san
+    ) else (
+        echo.
+        set /p "HF_TOKEN=Nhap HuggingFace token (hoac bo trong): "
+    )
+)
 mkdir "%HF_HOME%\hub" 2>nul
 echo [OK] HF cache: %HF_HOME%
 
