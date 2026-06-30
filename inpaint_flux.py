@@ -214,6 +214,7 @@ def inpaint(
     # ── Auto-detect best model based on VRAM ──
     vram = _get_vram_gb()
     use_flux = False
+    use_sdxl = False
     if vram >= 16:
         try:
             pipe = _load_flux_fill()
@@ -222,30 +223,31 @@ def inpaint(
             print(f'[Inpaint] Flux unavailable: {e}')
 
     if not use_flux:
-        if vram >= 10:
+        try:
             pipe = _load_sdxl_inpaint()
-        else:
+            use_sdxl = True
+        except Exception as e:
+            print(f'[Inpaint] SDXL failed: {e}, fallback SD 1.5')
             pipe = _load_sd_inpaint()
 
     if use_flux:
         model_label = 'Flux Fill'
-        gs = guidance_scale
-        steps = min(num_steps, 4)  # Flux schnell: 1-4 steps
-    elif vram >= 10:
+        gs = 30.0
+        steps = 4
+    elif use_sdxl:
         model_label = 'SDXL Inpaint'
-        gs = 7.5
-        steps = 30
+        gs = guidance_scale
+        steps = num_steps
     else:
         model_label = 'SD 1.5 Inpaint'
         gs = 7.5
         steps = 50
 
-    # Normalise inputs
+    # ── Normalise inputs (preserve alpha channel for later) ──
+    alpha = None
     if image.mode == 'RGBA':
-        # Composite onto white background (fix transparent areas getting corrupted)
-        bg = Image.new('RGB', image.size, (255, 255, 255))
-        bg.paste(image, mask=image.split()[3])
-        image = bg
+        alpha = image.split()[3]
+        image = image.convert('RGB')
     elif image.mode != 'RGB':
         image = image.convert('RGB')
     mask = mask.convert('L')
@@ -305,35 +307,15 @@ def inpaint(
             strength=strength,  # <1.0 = preserve more original content
         ).images[0]
 
-    # ── Compositing: strength <0.5 = ADD effect, not REPLACE ──
-    if strength < 0.5 and not use_flux:
-        # 1) Paint masked area BLACK, 2) inpaint with full strength
-        # 3) Screen-blend only the new pixels onto original
-        img_np = np.array(image_small.convert('RGB'))
-        mask_np2 = np.array(mask_small.convert('L'), dtype=np.uint8)
-        img_black = img_np.copy()
-        img_black[mask_np2 > 30] = [0, 0, 0]
-        img_black_pil = Image.fromarray(img_black)
-        with torch.no_grad():
-            fx = pipe(
-                prompt=prompt,
-                image=img_black_pil,
-                mask_image=mask_small,
-                height=new_h, width=new_w,
-                guidance_scale=gs, num_inference_steps=steps,
-                strength=0.99,
-            ).images[0]
-        fx_np = np.array(fx.convert('RGB')).astype(np.float32)
-        orig_np = img_np.astype(np.float32)
-        mask_f = mask_np2.astype(np.float32)[:,:,np.newaxis] / 255.0
-        # Screen blend: orig + fire*mask*0.8
-        blended = orig_np + (fx_np - orig_np) * mask_f * 0.8
-        result = Image.fromarray(np.clip(blended, 0, 255).astype(np.uint8))
-        print(f'[Inpaint] Add-effect mode: fire generated on black bg, composited')
-
     # Restore original size
     if needs_resize:
         result = result.resize((w, h), Image.LANCZOS)
+
+    # Re-apply alpha channel if original had transparency
+    if alpha is not None:
+        result = result.convert('RGBA')
+        result.putalpha(alpha)
+        print(f'[Inpaint] Alpha channel restored')
 
     elapsed = time.time() - t0
     print(f'[Inpaint:{model_label}] Done in {elapsed:.1f}s')
