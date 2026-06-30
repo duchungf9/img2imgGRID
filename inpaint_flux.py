@@ -2,7 +2,7 @@
 Inpainting module for Region Select.
 
 Uses FLUX.1-Fill-dev (4-step inference) for seamless prompt-guided region
-inpainting. Falls back to SD 1.5 if Flux is unavailable.
+inpainting. Only uses SDXL Inpainting (SD 1.5 removed — bad quality).
 
 The model receives the FULL image + a binary mask, outputs a FULL image where
 only the masked area is regenerated — everything outside the mask is preserved
@@ -148,34 +148,6 @@ def _load_sdxl_inpaint():
     return _sd_pipe
 
 
-def _load_sd_inpaint():
-    """Fallback: SD 1.5 Inpainting (no auth required, open weights)."""
-    global _sd_pipe, _device
-    if _sd_pipe is not None:
-        return _sd_pipe
-
-    _device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    vram = _get_vram_gb()
-    print(f'[Inpaint] Loading SD 1.5 fallback on {_device} (VRAM: {vram:.0f}GB)')
-
-    from diffusers import AutoPipelineForInpainting
-    pipe = AutoPipelineForInpainting.from_pretrained(
-        'runwayml/stable-diffusion-inpainting',
-        torch_dtype=torch.float16 if _device == 'cuda' else torch.float32,
-        safety_checker=None,
-        requires_safety_checker=False,
-    )
-    pipe.to(_device)
-    pipe.enable_attention_slicing()
-    # Use CPU offload on low-VRAM cards (<6GB like GTX 1650)
-    if vram < 6:
-        pipe.enable_model_cpu_offload()
-        print(f'[Inpaint] Low VRAM mode: CPU offload enabled')
-    _sd_pipe = pipe
-    print(f'[Inpaint] SD 1.5 fallback ready on {_device}')
-    return _sd_pipe
-
-
 def inpaint(
     image: Image.Image,
     mask: Image.Image,
@@ -214,7 +186,6 @@ def inpaint(
     # ── Auto-detect best model based on VRAM ──
     vram = _get_vram_gb()
     use_flux = False
-    use_sdxl = False
     if vram >= 16:
         try:
             pipe = _load_flux_fill()
@@ -223,25 +194,16 @@ def inpaint(
             print(f'[Inpaint] Flux unavailable: {e}')
 
     if not use_flux:
-        try:
-            pipe = _load_sdxl_inpaint()
-            use_sdxl = True
-        except Exception as e:
-            print(f'[Inpaint] SDXL failed: {e}, fallback SD 1.5')
-            pipe = _load_sd_inpaint()
+        pipe = _load_sdxl_inpaint()
 
     if use_flux:
         model_label = 'Flux Fill'
         gs = 30.0
         steps = 4
-    elif use_sdxl:
+    else:
         model_label = 'SDXL Inpaint'
         gs = guidance_scale
         steps = num_steps
-    else:
-        model_label = 'SD 1.5 Inpaint'
-        gs = 7.5
-        steps = 50
 
     # ── Normalise inputs (preserve alpha channel for later) ──
     alpha = None
