@@ -1,5 +1,15 @@
 import sys, io, math, os, json
 
+# ── Load .env file if exists ──
+_env_path = os.path.join(os.path.dirname(__file__), '.env')
+if os.path.exists(_env_path):
+    with open(_env_path) as _f:
+        for _line in _f:
+            _line = _line.strip()
+            if _line and not _line.startswith('#'):
+                _k, _v = _line.split('=', 1)
+                os.environ.setdefault(_k.strip(), _v.strip())
+
 # ── Force UTF-8 for stdout/stderr (fix 'charmap' error with Vietnamese) ──
 os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
 # ── Use E: drive for HF cache (C: only has 1GB free) ──

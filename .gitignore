@@ -2,3 +2,8 @@ static/test_masks/
 models/
 check_temp.js
 **/__pycache__/
+.env
+venv/
+*.pyc
+test_*.png
+*.pyc
