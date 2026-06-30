@@ -60,6 +60,8 @@ def normalize_prompt(prompt):
     inputs = tok(prompt, return_tensors='pt', padding=True, truncation=True)
     out = model.generate(**inputs, max_length=512)
     en = tok.decode(out[0], skip_special_tokens=True)
+    # Append quality suffix for better SD results
+    en = en.rstrip('.') + ', detailed, sharp focus.'
     print(f'[Prompt] "{prompt}" -> "{en}"')
     return en, True
 

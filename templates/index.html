@@ -1789,7 +1789,7 @@ $('genRevertBtn').addEventListener('click',()=>{
     function move(e){
         const rect=wrap.getBoundingClientRect();
         let pct=(e.clientX-rect.left)/rect.width*100;
-        pct=Math.max(5,Math.min(95,pct));
+        pct=Math.max(0,Math.min(100,pct));
         before.style.width=pct+'%';
         handle.style.left=pct+'%';
     }
