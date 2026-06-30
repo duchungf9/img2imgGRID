@@ -399,17 +399,6 @@ VD: thay áo giáp thành màu vàng gold, thêm họa tiết rồng
                     </div>
                 </div>
             </div>
-            <script>
-            $('advToggle').addEventListener('click',()=>{
-                const p=$('advParams'),t=$('advToggle');
-                const show=p.style.display!='block';
-                p.style.display=show?'block':'none';
-                t.textContent=show?'⚙️ Nâng cao ▾':'⚙️ Nâng cao ▸';
-            });
-            ['sliderSteps','sliderGuidance','sliderStrength'].forEach(id=>{
-                $(id).addEventListener('input',function(){$('val'+id.charAt(6).toUpperCase()+id.slice(7)).textContent=this.value});
-            });
-            </script>
 
             <div style="font-size:10px;color:#888;margin-top:6px;padding:6px;background:#0f0f13;border-radius:6px;border:1px solid #1e1e2e">
                 💡 <strong>Prompt tips:</strong> Gõ tiếng Việt, AI tự dịch. Càng chi tiết càng tốt (màu + chất + vị trí).
@@ -1794,6 +1783,21 @@ $('genRevertBtn').addEventListener('click',()=>{
         handle.style.left=pct+'%';
     }
 })();
+
+// ── Advanced params toggle ──
+const advToggle=$('advToggle'),advParams=$('advParams');
+if(advToggle)advToggle.addEventListener('click',()=>{
+    const show=advParams.style.display!='block';
+    advParams.style.display=show?'block':'none';
+    advToggle.textContent=show?'⚙️ Nâng cao ▾':'⚙️ Nâng cao ▸';
+});
+['sliderSteps','sliderGuidance','sliderStrength'].forEach(id=>{
+    const el=$(id);
+    if(el)el.addEventListener('input',function(){
+        const v=document.getElementById('val'+id.charAt(6).toUpperCase()+id.slice(7));
+        if(v)v.textContent=this.value;
+    });
+});
 
 // ── Init ──
 $('imageStyle').addEventListener('input', updatePrompt);
