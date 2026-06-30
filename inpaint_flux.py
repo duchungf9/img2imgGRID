@@ -126,6 +126,28 @@ def _get_vram_gb():
         return 0
 
 
+def _load_sdxl_inpaint():
+    """SDXL Inpainting — much better quality than SD 1.5, needs ~10GB VRAM."""
+    global _sd_pipe, _device
+    if _sd_pipe is not None:
+        return _sd_pipe
+
+    _device = 'cuda' if torch.cuda.is_available() else 'cpu'
+    print(f'[Inpaint] Loading SDXL Inpainting on {_device}...')
+
+    from diffusers import AutoPipelineForInpainting
+    pipe = AutoPipelineForInpainting.from_pretrained(
+        'diffusers/stable-diffusion-xl-1.0-inpainting-0.1',
+        torch_dtype=torch.float16 if _device == 'cuda' else torch.float32,
+        variant='fp16',
+    )
+    pipe.to(_device)
+    pipe.enable_attention_slicing()
+    _sd_pipe = pipe
+    print(f'[Inpaint] SDXL Inpainting ready on {_device}')
+    return _sd_pipe
+
+
 def _load_sd_inpaint():
     """Fallback: SD 1.5 Inpainting (no auth required, open weights)."""
     global _sd_pipe, _device
@@ -189,7 +211,7 @@ def inpaint(
     # ── Auto-translate Vietnamese prompt to English ──
     prompt, _was_translated = normalize_prompt(prompt)
 
-    # ── Auto-detect: Flux only if enough VRAM (>=16GB), else SD 1.5 ──
+    # ── Auto-detect best model based on VRAM ──
     vram = _get_vram_gb()
     use_flux = False
     if vram >= 16:
@@ -200,12 +222,19 @@ def inpaint(
             print(f'[Inpaint] Flux unavailable: {e}')
 
     if not use_flux:
-        pipe = _load_sd_inpaint()
+        if vram >= 10:
+            pipe = _load_sdxl_inpaint()
+        else:
+            pipe = _load_sd_inpaint()
 
     if use_flux:
         model_label = 'Flux Fill'
         gs = guidance_scale
         steps = min(num_steps, 4)  # Flux schnell: 1-4 steps
+    elif vram >= 10:
+        model_label = 'SDXL Inpaint'
+        gs = 7.5
+        steps = 30
     else:
         model_label = 'SD 1.5 Inpaint'
         gs = 7.5
@@ -228,7 +257,7 @@ def inpaint(
 
     # ── Scale down huge images to avoid OOM on 12GB VRAM ──
     vram = _get_vram_gb()
-    MAX_PX = 512 if (vram and vram < 6) else (1024 if use_flux else 768)
+    MAX_PX = 512 if (vram and vram < 6) else (1024 if use_flux else 1024)
     scale = min(MAX_PX / w, MAX_PX / h, 1.0)
     needs_resize = scale < 1.0
     if needs_resize:
@@ -253,12 +282,12 @@ def inpaint(
     if use_flux:
         pipe.enable_vae_tiling()
 
-    # Dilation: expand mask slightly for cleaner edge blending
+    # Minimal mask feather for edge blending (1px)
     if not use_flux:
         import cv2
         mask_np = np.array(mask_small, dtype=np.uint8)
-        kernel = np.ones((5,5), np.uint8)
-        mask_np = cv2.dilate(mask_np, kernel, iterations=1)
+        mask_np = cv2.GaussianBlur(mask_np, (3,3), 0.5)
+        _, mask_np = cv2.threshold(mask_np, 127, 255, cv2.THRESH_BINARY)
         mask_small = Image.fromarray(mask_np)
 
     print(f'[Inpaint:{model_label}] {new_w}x{new_h} | steps={steps} guidance={gs} | '
