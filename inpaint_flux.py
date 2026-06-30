@@ -205,11 +205,16 @@ def inpaint(
         steps = min(num_steps, 4)  # Flux schnell: 1-4 steps
     else:
         model_label = 'SD 1.5 Inpaint'
-        gs = 7.5
-        steps = 20
+        gs = 7.0          # lower CFG = more faithful to original
+        steps = 25         # more steps = better quality
 
     # Normalise inputs
-    if image.mode != 'RGB':
+    if image.mode == 'RGBA':
+        # Composite onto white background (fix transparent areas getting corrupted)
+        bg = Image.new('RGB', image.size, (255, 255, 255))
+        bg.paste(image, mask=image.split()[3])
+        image = bg
+    elif image.mode != 'RGB':
         image = image.convert('RGB')
     mask = mask.convert('L')
     mask_np = np.array(mask)
@@ -245,6 +250,14 @@ def inpaint(
     if use_flux:
         pipe.enable_vae_tiling()
 
+    # Dilation: expand mask slightly for cleaner edge blending
+    if not use_flux:
+        import cv2
+        mask_np = np.array(mask_small, dtype=np.uint8)
+        kernel = np.ones((5,5), np.uint8)
+        mask_np = cv2.dilate(mask_np, kernel, iterations=1)
+        mask_small = Image.fromarray(mask_np)
+
     print(f'[Inpaint:{model_label}] {new_w}x{new_h} | steps={steps} guidance={gs} | '
           f'prompt="{prompt[:80]}"')
 
@@ -257,6 +270,7 @@ def inpaint(
             width=new_w,
             guidance_scale=gs,
             num_inference_steps=steps,
+            strength=0.8,  # <1.0 = preserve more original content
         ).images[0]
 
     # Restore original size
