@@ -1729,12 +1729,17 @@ $('generateBtn').addEventListener('click',async()=>{
         const img=new Image();
         await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('Failed to decode'));img.src=URL.createObjectURL(resultBlob)});
         generatedResult=img;showGenerated=true;
-        // Show comparison slider
-        const cw=$('compareWrap'),cb=$('compareBefore'),ca=$('compareAfter');
+        // Show comparison slider overlay on top of canvas (don't hide canvas)
+        const cw=$('compareWrap'),cs=$('regionCanvas');
         $('compareBeforeImg').src=sourceImage.src;
         $('compareAfterImg').src=img.src;
-        cw.style.display='block';canvas.style.display='none';
-        cw.style.width=canvas.style.width;cw.style.height=canvas.style.height;
+        // Position overlay to match canvas rectangle
+        const cr=cs.getBoundingClientRect();
+        const dz=cs.parentElement;
+        cw.style.position='absolute';
+        cw.style.top='0';cw.style.left='0';
+        cw.style.width=cr.width+'px';cw.style.height=cr.height+'px';
+        cw.style.display='block';
         $('genKeepBtn').style.display='';$('genRevertBtn').style.display='';
         const sec=Math.round((Date.now()-startTime)/1000);
         fill.style.width='100%';
@@ -1752,7 +1757,7 @@ $('generateBtn').addEventListener('click',async()=>{
 $('genKeepBtn').addEventListener('click',()=>{
     if(!generatedResult)return;
     sourceImage=generatedResult;generatedResult=null;showGenerated=false;
-    $('compareWrap').style.display='none';canvas.style.display='';
+    $('compareWrap').style.display='none';
     $('genKeepBtn').style.display='none';$('genRevertBtn').style.display='none';
     $('genStatus').textContent='✅ Kết quả đã lưu. Vẽ region mới để tiếp tục chỉnh sửa.';
     redraw();showToast('✅ Applied!');
@@ -1760,7 +1765,7 @@ $('genKeepBtn').addEventListener('click',()=>{
 
 $('genRevertBtn').addEventListener('click',()=>{
     generatedResult=null;showGenerated=false;
-    $('compareWrap').style.display='none';canvas.style.display='';
+    $('compareWrap').style.display='none';
     $('genKeepBtn').style.display='none';$('genRevertBtn').style.display='none';
     $('genStatus').textContent='↩️ Đã revert về ảnh gốc.';
     redraw();showToast('↩️ Reverted');
