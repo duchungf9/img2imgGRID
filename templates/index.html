@@ -231,6 +231,13 @@ header span{color:#7c7c9a;font-size:12px}
             <canvas id="regionCanvas"></canvas>
             <div class="file-label" id="regionFileLabel" style="display:none;"></div>
             <input type="file" id="regionFileInput" accept="image/*" style="display:none"/>
+            <!-- Before/After comparison slider -->
+            <div id="compareWrap" style="display:none;position:absolute;top:0;left:0;width:100%;height:100%;z-index:10;cursor:ew-resize;overflow:hidden;border-radius:8px;">
+                <div id="compareAfter" style="position:absolute;top:0;left:0;width:100%;height:100%;"><img id="compareAfterImg" style="width:100%;height:100%;object-fit:contain"></div>
+                <div id="compareBefore" style="position:absolute;top:0;left:0;width:50%;height:100%;overflow:hidden;"><img id="compareBeforeImg" style="width:100%;height:100%;object-fit:contain;position:absolute;top:0;left:0;"></div>
+                <div id="compareHandle" style="position:absolute;top:0;left:50%;width:3px;height:100%;background:#4ecdc4;box-shadow:0 0 8px #4ecdc4;"></div>
+                <div id="compareLabel" style="position:absolute;bottom:8px;left:50%;transform:translateX(-50%);font-size:10px;padding:3px 8px;background:#000000aa;border-radius:4px;color:#fff;pointer-events:none">◀ Trước | Sau ▶</div>
+            </div>
         </div>
     </div>
 
@@ -380,7 +387,31 @@ VD: thay áo giáp thành màu vàng gold, thêm họa tiết rồng
                 <div id="genProgressFill" style="height:100%;width:0%;background:linear-gradient(90deg,#4ecdc4,#44b3ab);border-radius:3px;transition:width 1s;"></div>
             </div>
             <div id="genProgressElapsed" style="display:none;font-size:10px;color:#888;margin-top:2px;text-align:right;"></div>
-            <div style="font-size:10px;color:#888;margin-top:6px;padding:6px;background:#0f0f13;border-radius:6px;border:1px solid #1e1e2e;">
+
+            <!-- Advanced params -->
+            <div style="margin-top:6px">
+                <span id="advToggle" style="font-size:10px;color:#666;cursor:pointer;user-select:none">⚙️ Nâng cao ▸</span>
+                <div id="advParams" style="display:none;margin-top:6px;padding:8px;background:#0f0f13;border-radius:6px;border:1px solid #1e1e2e">
+                    <div style="display:flex;gap:12px;flex-wrap:wrap">
+                        <div style="flex:1;min-width:100px"><label style="font-size:10px;color:#888">Steps: <span id="valSteps">50</span></label><input type="range" id="sliderSteps" min="10" max="100" value="50" style="width:100%"></div>
+                        <div style="flex:1;min-width:100px"><label style="font-size:10px;color:#888">Guidance: <span id="valGuidance">7.5</span></label><input type="range" id="sliderGuidance" min="1" max="20" value="7.5" step="0.5" style="width:100%"></div>
+                        <div style="flex:1;min-width:100px"><label style="font-size:10px;color:#888">Strength: <span id="valStrength">0.8</span></label><input type="range" id="sliderStrength" min="0.1" max="1" value="0.8" step="0.05" style="width:100%"></div>
+                    </div>
+                </div>
+            </div>
+            <script>
+            $('advToggle').addEventListener('click',()=>{
+                const p=$('advParams'),t=$('advToggle');
+                const show=p.style.display!='block';
+                p.style.display=show?'block':'none';
+                t.textContent=show?'⚙️ Nâng cao ▾':'⚙️ Nâng cao ▸';
+            });
+            ['sliderSteps','sliderGuidance','sliderStrength'].forEach(id=>{
+                $(id).addEventListener('input',function(){$('val'+id.charAt(6).toUpperCase()+id.slice(7)).textContent=this.value});
+            });
+            </script>
+
+            <div style="font-size:10px;color:#888;margin-top:6px;padding:6px;background:#0f0f13;border-radius:6px;border:1px solid #1e1e2e">
                 💡 <strong>Prompt tips:</strong> Gõ tiếng Việt thoải mái, AI tự dịch. Viết càng chi tiết càng tốt:
                 màu sắc + chất liệu + vị trí. VD: "áo giáp vàng gold họa tiết rồng" ✅
             </div>
@@ -1686,18 +1717,28 @@ $('generateBtn').addEventListener('click',async()=>{
         const origBlob=await fetchOriginalBlob();
         elapsed.textContent='⏳ AI Inpainting...';
         status.textContent='⏳ AI Inpainting đang chạy...';
-        const f=new FormData();f.append('image',origBlob,'image.png');f.append('mask',maskBlob,'mask.png');f.append('prompt',prompt);
+        const f=new FormData();
+        f.append('image',origBlob,'image.png');f.append('mask',maskBlob,'mask.png');f.append('prompt',prompt);
+        f.append('steps',$('sliderSteps').value);
+        f.append('guidance',$('sliderGuidance').value);
+        f.append('strength',$('sliderStrength').value);
         const res=await fetch('/flux/inpaint',{method:'POST',body:f});
         if(!res.ok){const err=await res.json().catch(()=>({error:res.statusText}));throw Error(err.error||'Server error')}
         fill.style.width='95%';
         const resultBlob=await res.blob();
         const img=new Image();
         await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('Failed to decode'));img.src=URL.createObjectURL(resultBlob)});
-        generatedResult=img;showGenerated=true;redraw();
+        generatedResult=img;showGenerated=true;
+        // Show comparison slider
+        const cw=$('compareWrap'),cb=$('compareBefore'),ca=$('compareAfter');
+        $('compareBeforeImg').src=sourceImage.src;
+        $('compareAfterImg').src=img.src;
+        cw.style.display='block';canvas.style.display='none';
+        cw.style.width=canvas.style.width;cw.style.height=canvas.style.height;
         $('genKeepBtn').style.display='';$('genRevertBtn').style.display='';
         const sec=Math.round((Date.now()-startTime)/1000);
         fill.style.width='100%';
-        status.textContent=`✅ Xong! (${sec}s) — Nếu ưng bấm "Keep", không thì chỉnh prompt Generate lại.`;
+        status.textContent=`✅ Xong! (${sec}s) — Kéo thanh trượt để so sánh. Bấm "Keep" nếu ưng.`;
         elapsed.textContent=`✅ ${sec}s`;
         setTimeout(()=>{bar.style.display='none';elapsed.style.display='none'},5000);
         showToast(`✅ Xong! (${sec}s)`);
@@ -1711,6 +1752,7 @@ $('generateBtn').addEventListener('click',async()=>{
 $('genKeepBtn').addEventListener('click',()=>{
     if(!generatedResult)return;
     sourceImage=generatedResult;generatedResult=null;showGenerated=false;
+    $('compareWrap').style.display='none';canvas.style.display='';
     $('genKeepBtn').style.display='none';$('genRevertBtn').style.display='none';
     $('genStatus').textContent='✅ Kết quả đã lưu. Vẽ region mới để tiếp tục chỉnh sửa.';
     redraw();showToast('✅ Applied!');
@@ -1718,10 +1760,27 @@ $('genKeepBtn').addEventListener('click',()=>{
 
 $('genRevertBtn').addEventListener('click',()=>{
     generatedResult=null;showGenerated=false;
+    $('compareWrap').style.display='none';canvas.style.display='';
     $('genKeepBtn').style.display='none';$('genRevertBtn').style.display='none';
     $('genStatus').textContent='↩️ Đã revert về ảnh gốc.';
     redraw();showToast('↩️ Reverted');
 });
+
+// ── Comparison Slider Drag ──
+(function(){
+    const wrap=$('compareWrap'),before=$('compareBefore'),handle=$('compareHandle');
+    let dragging=false;
+    wrap.addEventListener('mousedown',e=>{dragging=true;move(e)});
+    document.addEventListener('mousemove',e=>{if(dragging)move(e)});
+    document.addEventListener('mouseup',()=>{dragging=false});
+    function move(e){
+        const rect=wrap.getBoundingClientRect();
+        let pct=(e.clientX-rect.left)/rect.width*100;
+        pct=Math.max(5,Math.min(95,pct));
+        before.style.width=pct+'%';
+        handle.style.left=pct+'%';
+    }
+})();
 
 // ── Init ──
 $('imageStyle').addEventListener('input', updatePrompt);

@@ -158,6 +158,7 @@ def inpaint(
     prompt: str,
     guidance_scale: float = 30.0,
     num_steps: int = 4,
+    strength: float = 0.8,
 ) -> Image.Image:
     """
     Run prompt-guided inpainting. The model fills only the masked area
@@ -270,7 +271,7 @@ def inpaint(
             width=new_w,
             guidance_scale=gs,
             num_inference_steps=steps,
-            strength=0.8,  # <1.0 = preserve more original content
+            strength=strength,  # <1.0 = preserve more original content
         ).images[0]
 
     # Restore original size

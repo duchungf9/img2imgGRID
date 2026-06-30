@@ -295,8 +295,10 @@ def flux_inpaint():
 
     try:
         from inpaint_flux import inpaint as inpaint_fn
-        steps = int(request.form.get('steps', 20))
-        result = inpaint_fn(img, mask, prompt, num_steps=steps)
+        steps = int(request.form.get('steps', 50))
+        guidance = float(request.form.get('guidance', 7.5))
+        strength = float(request.form.get('strength', 0.8))
+        result = inpaint_fn(img, mask, prompt, num_steps=steps, guidance_scale=guidance, strength=strength)
         buf = io.BytesIO()
         result.save(buf, format='PNG')
         return send_file(io.BytesIO(buf.getvalue()), mimetype='image/png')
