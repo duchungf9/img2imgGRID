@@ -11,7 +11,7 @@ seamlessly via native fill inpainting (no patch/blend artifacts).
 Lazy-load pattern follows sam_tools.py: model loaded on first call, cached globally.
 """
 
-import os, sys, time
+import os, sys, time, re
 import numpy as np
 from PIL import Image
 
@@ -25,6 +25,43 @@ for _v in ('HF_HOME', 'HUGGINGFACE_HUB_CACHE'):
 os.environ.setdefault('PYTHONIOENCODING', 'utf-8')
 
 import torch
+
+# ── Auto-translate Vietnamese prompt → English ──
+_translator = None
+
+def _has_vn(text):
+    return bool(re.search(r'[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]', text.lower()))
+
+def _load_translator():
+    global _translator
+    if _translator is not None:
+        return _translator
+    try:
+        from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+        print('[Trans] Loading vi-en translator...')
+        t0 = time.time()
+        tok = AutoTokenizer.from_pretrained('Helsinki-NLP/opus-mt-vi-en')
+        model = AutoModelForSeq2SeqLM.from_pretrained('Helsinki-NLP/opus-mt-vi-en')
+        _translator = (tok, model)
+        print(f'[Trans] Ready ({time.time()-t0:.0f}s)')
+        return _translator
+    except Exception as e:
+        print(f'[Trans] Load failed: {e}')
+        return None
+
+def normalize_prompt(prompt):
+    """Auto-detect Vietnamese → translate to English."""
+    if not prompt or not _has_vn(prompt):
+        return prompt, False
+    tr = _load_translator()
+    if tr is None:
+        return prompt, False
+    tok, model = tr
+    inputs = tok(prompt, return_tensors='pt', padding=True, truncation=True)
+    out = model.generate(**inputs, max_length=512)
+    en = tok.decode(out[0], skip_special_tokens=True)
+    print(f'[Prompt] "{prompt}" -> "{en}"')
+    return en, True
 
 # ── Backend state ──
 _flux_pipe = None
@@ -145,6 +182,9 @@ def inpaint(
         Full inpainted image (same size as input).
     """
     t0 = time.time()
+
+    # ── Auto-translate Vietnamese prompt to English ──
+    prompt, _was_translated = normalize_prompt(prompt)
 
     # ── Auto-detect: Flux only if enough VRAM (>=16GB), else SD 1.5 ──
     vram = _get_vram_gb()
