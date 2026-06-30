@@ -1717,25 +1717,21 @@ $('generateBtn').addEventListener('click',async()=>{
         const img=new Image();
         await new Promise((resolve,reject)=>{img.onload=resolve;img.onerror=()=>reject(Error('Failed to decode'));img.src=URL.createObjectURL(resultBlob)});
         generatedResult=img;showGenerated=true;
-        // Show comparison slider overlay on top of canvas (don't hide canvas)
-        const cw=$('compareWrap'),cs=$('regionCanvas');
-        const cr=cs.getBoundingClientRect();
-        // Set both images to exact canvas pixel dimensions (no scaling)
+        // Hide canvas, show comparison slider (full drop-zone size)
+        const cw=$('compareWrap'),cs=$('regionCanvas'),dz=cs.parentElement;
+        const dzr=dz.getBoundingClientRect();
+        canvas.style.visibility='hidden';
         const bi=$('compareBeforeImg'), ai=$('compareAfterImg');
         bi.src=sourceImage.src; ai.src=img.src;
-        bi.onload=ai.onload=()=>{
-            bi.style.width=cr.width+'px'; bi.style.height=cr.height+'px';
-            ai.style.width=cr.width+'px'; ai.style.height=cr.height+'px';
-            cw.style.width=cr.width+'px'; cw.style.height=cr.height+'px';
-            $('compareBefore').style.height=cr.height+'px';
-        };
-        // If already loaded, set sizes directly
-        if(bi.complete && ai.complete){
-            bi.style.width=cr.width+'px'; bi.style.height=cr.height+'px';
-            ai.style.width=cr.width+'px'; ai.style.height=cr.height+'px';
-            cw.style.width=cr.width+'px'; cw.style.height=cr.height+'px';
-            $('compareBefore').style.height=cr.height+'px';
-        }
+        // Set overlay to fill drop-zone, images to fill overlay
+        [bi,ai].forEach(i=>{
+            i.style.width=dzr.width+'px'; i.style.height=dzr.height+'px';
+            i.style.objectFit='contain';
+        });
+        cw.style.width=dzr.width+'px'; cw.style.height=dzr.height+'px';
+        $('compareBefore').style.height=dzr.height+'px';
+        $('compareBefore').style.width='50%';
+        $('compareHandle').style.left='50%';
         cw.style.display='block';
         $('genKeepBtn').style.display='';$('genRevertBtn').style.display='';
         const sec=Math.round((Date.now()-startTime)/1000);
@@ -1751,10 +1747,12 @@ $('generateBtn').addEventListener('click',async()=>{
     finally{clearInterval(timer);btn.classList.remove('loading');btn.disabled=false}
 });
 
+function hideCompare(){canvas.style.visibility='';$('compareWrap').style.display='none';}
+
 $('genKeepBtn').addEventListener('click',()=>{
     if(!generatedResult)return;
     sourceImage=generatedResult;generatedResult=null;showGenerated=false;
-    $('compareWrap').style.display='none';
+    hideCompare();
     $('genKeepBtn').style.display='none';$('genRevertBtn').style.display='none';
     $('genStatus').textContent='✅ Kết quả đã lưu. Vẽ region mới để tiếp tục chỉnh sửa.';
     redraw();showToast('✅ Applied!');
@@ -1762,7 +1760,7 @@ $('genKeepBtn').addEventListener('click',()=>{
 
 $('genRevertBtn').addEventListener('click',()=>{
     generatedResult=null;showGenerated=false;
-    $('compareWrap').style.display='none';
+    hideCompare();
     $('genKeepBtn').style.display='none';$('genRevertBtn').style.display='none';
     $('genStatus').textContent='↩️ Đã revert về ảnh gốc.';
     redraw();showToast('↩️ Reverted');
