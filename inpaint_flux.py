@@ -266,7 +266,7 @@ def inpaint(
             width=new_w,
             guidance_scale=gs,
             num_inference_steps=steps,
-            strength=strength,  # <1.0 = preserve more original content
+            strength=0.99,  # SDXL inpainting trained with high strength — mask controls region
         ).images[0]
 
     # Restore original size
